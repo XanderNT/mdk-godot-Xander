@@ -9,3 +9,5 @@ They need Python 3 with numpy and Pillow.
   briefing and Score-O-matic pages (state 6).
 - `fall3d_dump.py`: lists the fall's files (`FALL3D.BNI`, `FALL3D_n.MTI`, `FALL3D.SNI`), decodes
   `FALLPU_n` and the `ZOOMnnnn` haze masks, and exports PNGs (`--png <dir>`).
+- `stream_tunnel.py`: lists `STREAM.BNI`, prints the stream's colour ramp, replays the tube generator
+  (0x434838) and exports it as OBJ (`--obj`) or `BG`/`PLANET`/`LIGHT` as PNGs (`--png`).

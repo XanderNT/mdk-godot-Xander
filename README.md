@@ -1,7 +1,7 @@
 # MDK in Godot
 
 ![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Progress: about 70%](https://img.shields.io/badge/progress-~70%25-yellow)
+![Progress: about 75%](https://img.shields.io/badge/progress-~75%25-yellow)
 ![Godot 4.7](https://img.shields.io/badge/Godot-4.7-478cbf?logo=godotengine&logoColor=white)
 
 A port of [MDK](https://en.wikipedia.org/wiki/MDK_(video_game)) (Shiny Entertainment, 1997) to
@@ -28,10 +28,10 @@ there's no release. See [the roadmap](docs/roadmap.md).
 | Chain gun, items, sniper mode, air strike | █████████░ 90% |
 | HUD, menus, options, key bindings | ████████░░ 80% |
 | Sound and music | ██████░░░░ 60% |
-| Level flow: briefing, statistics, saves | ██████░░░░ 60% |
-| The fall (`FALL3D`) and the stream between levels | █████░░░░░ 50% |
+| Level flow: briefing, statistics, saves | ███████░░░ 70% |
+| The fall (`FALL3D`) and the stream between levels | █████████░ 90% |
 | End videos, enhanced graphics mode | ░░░░░░░░░░ 0% |
-| **Overall** | **about 70%** |
+| **Overall** | **about 75%** |
 
 ## Screenshots
 
@@ -55,8 +55,8 @@ Open the project in Godot 4.7 and run it. Command line options (after `--`):
   in the order 7, 6, 3, 4, 8, 5.
 - `--viewer`: free-camera level viewer (`--camera=x,y,z`, `--look-at=x,y,z`).
 - `--models`: model viewer (`--arena=NAME`).
-- `--stats=N`, `--briefing=N`, `--fall=N`: the screens after LEVELn, its briefing, or the fall
-  before it.
+- `--stats=N`, `--briefing=N`, `--fall=N`, `--stream=N`: the screens after LEVELn, its briefing,
+  the fall before it or the stream after it.
 - `--screenshot=file.png`: save a screenshot and quit.
 - `--profile=seconds`: print performance and script statistics, then quit. `--no-scripts` disables
   the scripts.
@@ -67,8 +67,8 @@ Controls (they can be changed in Options): W/S or Up/Down to run, A/D to strafe,
 Left/Right to turn, Space to jump (hold it while falling to open the chute), Shift for turbo, the
 left mouse button or Ctrl to fire, the right mouse button for sniper mode (the mouse wheel or
 PageUp/PageDown zoom), E or Enter to use the selected item (Tab, `[`, `]`, the mouse wheel or 1–5
-select it), Escape for the pause menu. In the fall before a level the movement keys steer Kurt and
-Escape skips it. In the level viewer: WASD to move, Q/E to go down/up, click
+select it), Escape for the pause menu. In the fall before a level and the stream after it the
+movement keys steer Kurt and Escape skips them. In the level viewer: WASD to move, Q/E to go down/up, click
 to look around, Shift to go faster.
 
 ## Layout

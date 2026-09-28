@@ -3,7 +3,8 @@
 ## Game command line options (`--level`, `--viewer`, `--screenshot`, …) skip the menu,
 ## unless `--menu` is given; `--options` and `--controls` open those screens; `--stats=N` shows the
 ## screens after LEVELn (`--phase=1…4` starts at a page, `--counts=shots,hits,sniper,sniper hits,
-## kills,enemies,heads`, `--towns=bits`), `--briefing=N` its briefing and `--fall=N` the fall before it.
+## kills,enemies,heads`, `--towns=bits`), `--briefing=N` its briefing and `--fall=N` the fall before it,
+## `--stream=N` the stream after it.
 extends Control
 
 
@@ -23,6 +24,11 @@ func _ready() -> void:
 		GameState.level = int(args.get("stats", args.get("briefing", "7")))
 		StatsScreen.briefing_only = args.has("briefing")
 		get_tree().change_scene_to_file.call_deferred("res://game/menu/stats_screen.tscn")
+		return
+	if args.has("stream"):
+		# Test: the stream after LEVELn (`--stream=N`).
+		GameState.level = int(args.stream)
+		get_tree().change_scene_to_file.call_deferred("res://game/stream/stream.tscn")
 		return
 	if args.has("fall"):
 		# Test: the fall before LEVELn (`--fall=N`).

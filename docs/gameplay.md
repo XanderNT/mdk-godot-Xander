@@ -304,9 +304,9 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
   (`0x57440f` = `0x573b5c`).
 - **The fall** (state 2, `fall_3d.c`): a minigame in its own files, played after each briefing;
   see [The fall](#the-fall-state-2-fall_3dc) below.
-- **The stream** (state 5, `STREAM/STREAM.BNI`, `STREAM.MTI`): Kurt steers down a generated tunnel
-  (0x434838, not decoded yet), hitting the walls hurts; Bones rescues him (`RESCUE`) after segment
-  177 or at 1 health (the Gunta variant ends at 186).
+- **The stream** (state 5, `STREAM/STREAM.BNI`, `STREAM.MTI`): Kurt steers down a generated tube,
+  hitting the walls hurts; Bones rescues him (`RESCUE`) after segment 177 or at 1 health; after
+  LEVEL8 he follows Gunter to a planet instead. See [The stream](#the-stream-state-5-streamc-).
 - **Statistics** (state 6, `MISC/STATS.BNI`, `STATS.MTI`): `L1_INTRM` until a key; the debriefing
   typed at 15 characters per second on `L<n>_MAP`; the Score-O-matic; then the briefing `BRIEFn`
   on the next map (health raised to 100, the inventory emptied). See
@@ -314,7 +314,8 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
 - **In the port**: the order of play, the loading screen (`LoadingScreen`), the end of level
   (`MDKEndLevel`), the statistics, debriefing and briefing (`StatsScreen`: after a level below
   index 4, and the briefing alone for a new game), the fall after every briefing (`MDKFall`), then
-  the next level. The stream and the save prompt after the Score-O-matic aren't done. The Score-O-matic's counts
+  the next level; the stream after every level but the last (`MDKStream`). The save prompt after
+  the Score-O-matic isn't done. The Score-O-matic's counts
   (`GameState.stats`) are cleared when a level starts.
 
 ### Statistics and briefing (state 6)
@@ -678,6 +679,533 @@ game returns to the menu (game over).
   `K_COLL1`/`2`, `K_SEEN`. No music.
 - Loaded but unused by the fall code ❓: `FLARE1`–`FLARE4`, `BANG` (a 26-frame RLE animation),
   `PICK`.
+
+## The stream (state 5, `stream.c` ❓)
+
+Played after each level (the end of level's white flash leads into it), before the statistics:
+Kurt flies down a randomly generated translucent tube in space. Init 0x433b50, each frame
+0x4352ac, cleanup 0x435210. At the end Bones picks him up with a crane (levels 0–3), or, after
+LEVEL8 (index 4, the "Gunter variant"), Kurt follows Gunter carrying Bones towards a planet.
+`tools/python/stream_tunnel.py` lists `STREAM.BNI`, prints the colour ramp and replays the tunnel
+generator (OBJ export).
+
+**In the port** (`game/stream/stream.gd`, `MDKStream`; the tube in `stream_tube.gd`, `StreamTube`):
+all of the below: the tube generated ring by
+ring with the same random walks, drawn far to near with the vertex colours and alphas (one
+`ImmediateMesh` rebuilt each frame, triangles facing away from the eye skipped), the scrolling
+`BG`, the lights (billboards, added to the colours behind ❓), the planet, Kurt's steering, drift,
+walls, damage and speed, the `SWH150` bonus, the rescue, the Gunter variant, the camera, the fades
+(the screen shader of the fall), the health box, the sounds. The health and the pickups come from
+the level (`GameState.carry`) and go on to the statistics or to LEVEL5. The rand() sequence isn't
+the game's, so the tubes differ from the original's. Esc ends the stream (not in the original).
+Test: `--stream=N` (N = the LEVELn number just finished) with `--wait`, `--screenshot`, `--health`.
+
+### The tunnel
+
+### Conventions ✅
+
+- **World axes**: X right, Y forward (the tunnel starts along +Y), Z up; right-handed. Segment
+  index `n` is an absolute counter; its ring-buffer slot is `n & 31`.
+- **Units**: one segment is 10 units long. Kurt's position along the tunnel is a float segment
+  coordinate `s` (obj+0x5c): the spine point at `s` is `lerp(O[trunc s], O[trunc s + 1], frac s)`.
+- **Angles** are in degrees (`sincos_deg` 0x440288).
+- `rand()` is Watcom's: `state = state × 0x41C64E6D + 0x3039`, returns `(state >> 16) & 0x7FFF`
+  (0x4794dd). Below `u = rand() − 0x4000` (−16384..16383).
+- `trunc` = 0x4797c0 (`frndint` with the rounding control set to chop).
+- In Godot (Y up, −Z forward) map MDK `(x, y, z)` → Godot `(x, z, −y)`.
+
+### Data ✅
+
+| Address | Size | Meaning |
+|---|---|---|
+| 0x51a274 | i32 | `r`, read index: oldest ring still alive (≈ Kurt's segment) |
+| 0x51a278 | i32 | `w`, write index: next ring to generate (`w = r + 31` in play) |
+| 0x51fa7c + 0x30·slot | 12 f32 | segment matrix `M[n]`, 3×4 row-major: rows `[m0 m1 m2 tx]`, `[m4 m5 m6 ty]`, `[m8 m9 m10 tz]`; column 1 is the forward axis, `(tx, ty, tz)` = the ring centre `O[n]` |
+| 0x51a27c + 0xc0·slot | 16 × vec3 | ring `n`: 16 world points |
+| 0x51ba7c + 0x200·slot | 16 × 2 × vec4 | wall planes of the segment between ring `n` and `n+1` (`nx, ny, nz, d`, normal pointing into the tunnel) |
+| 0x52007c + 0x20·slot | 32 bytes | colour byte (0–63) per point of ring `n` (only the first 16 are used) |
+| 0x52047c + 4·slot | ptr | linked list of the stream objects ("aliens", 0x32e bytes, pool of 399 at 0x523504) in that segment |
+| 0x520500, 0x520504, 0x5204fc | f32 | turn angles per segment about local X, Y (forward: roll), Z |
+| 0x520508 | f32 | tunnel radius (starts 10.0) |
+| 0x520510, 0x520514 | i32 | shade offsets A, B (0–63) |
+| 0x520518 | f32 | shade blend `t` (0..1) |
+| 0x520898 | f32 | max turn angle (per axis, per segment) |
+| 0x52089c, 0x5208a0 | f32 | min / max radius |
+| 0x520894 | i32 | final-stream flag = `level index > 3` (Gunta variant, ends at a planet) |
+| 0x5744d8 + 0x100·k | 64 × RGBA | vertex colours of the ramp for distance level k = 0..5 (bytes B, G, R, A) |
+| 0x5738e4 | ptr | software-renderer blend tables, 6 × 64 × 256 bytes (not used by the D3D path) |
+
+### Initialisation (0x433b50) ✅
+
+1. Clears 0x51a274..0x5208a4 (all of the above), loads `STREAM.MTI` / `STREAM.BNI`.
+2. **Palette** `0x52051c` (768 bytes): colours 0–63 = the global palette `0x5735e4`, colours
+   64–255 = bytes 0xC0..0x2FF of the `PAL` entry (copied to `0x5205dc`). `set_palette(0x52051c, 3)`.
+3. `BG` (600×360) is converted to a 16-bit DirectDraw surface (0x438a70); `PLANET` (128×128) and
+   `LIGHT` (64×64, a D3D texture at 0x57f870: 64×64, flag 1) are loaded.
+4. **Limits** from the difficulty `D` (0x57423e) and the level index `L` (0x574268, 0–4), with
+   `h = L >> 1`:
+
+   | D | max turn 0x520898 | min radius 0x52089c | max radius 0x5208a0 |
+   |---|---|---|---|
+   | 0 easy | L + 6 | 10 − h | 17 − h |
+   | 1 normal | L + 8 | 10 − h | 17 − L |
+   | 2 hard | L + 10 | 10 − h | 13 − h |
+
+   (For L = 0..4, normal: max turn 8..12°, radius 10..17 at L 0 down to 8..13 at L 4.)
+5. `r = w = 0`, `M[0]` = identity (origin 0), radius = 10.0, `A = rand() & 63`,
+   `B = rand() & 63`, `t = 0`, angles 0.
+6. Calls the generator 31 times → rings 0..30, `w = 31`.
+7. Builds the colour ramp (see [Colours](#colours)), resets the camera matrix, creates Kurt and
+   the other actors.
+
+### The generator (0x434838) ✅
+
+Called 31× at init and once each time `r` advances (0x435c4c: `if r + 1 < s − 0.75: r += 1;
+generate`), so the ring buffer always holds rings `r .. r + 30` and the tunnel extends ~300 units
+ahead. With `n = w` (the ring being made), `p = n − 1`:
+
+0. **Final stream** (0x520894 ≠ 0) and `n > 186`: no more rings; the first time it spawns the
+   PLANET sprite at segment `n − 3` (0x4350dc) and returns.
+1. **Matrix** (skipped when `n == r`, i.e. only for ring 0 at init):
+   `L = Rx(a) · Ry(b) · Rz(c)` with `a = 0x520500, b = 0x520504, c = 0x5204fc` (0x46de70, scale 1,
+   translation (0, 10, 0)), `M[n] = M[p] · L` (0x46dba0), then each of the 3 columns is
+   normalised (0x438f50, no re-orthogonalisation). Hence
+   `O[n] = O[p] + 10 · M[p].column1` and `R[n] = R[p] · Rx(a)Ry(b)Rz(c)`. The rotation matrix
+   (rows):
+   ```
+   [ cb·cc,               −cb·sc,               sb     ]
+   [ sa·sb·cc + ca·sc,    ca·cc − sa·sb·sc,    −sa·cb  ]
+   [ sa·sc − ca·sb·cc,    ca·sb·sc + sa·cc,     ca·cb  ]
+   ```
+   So `b` rolls the frame about the forward axis, `a` pitches, `c` yaws.
+   The objects left in slot `n & 31` (ring `n − 32`) are freed (0x4351a0), then
+   `if rand() & 3: spawn a LIGHT sprite in segment p` (0x434f64, 3 chances in 4, 4 more rand calls).
+2. **Ring points** (always), `j = 0..15`, `θ = 22.5·j` (point 0 on local +Z = top, point 4 on +X):
+   ```
+   jx = (rand() − 0x4000 + 163840) / 163840     ∈ [0.9, 1.1)   (× 6.10352e-6)
+   jz = (rand() − 0x4000 + 163840) / 163840
+   local = (radius · sinθ · jx, 0, radius · cosθ · jz)
+   P[n][j] = M[n] · local   (0x46dcd4: R·v + O)
+   ```
+   Each coordinate is jittered by ±10 % independently, so the rings are slightly irregular.
+3. **Planes and colours of segment p** (not for ring 0), `Pv = P[p]` (older ring),
+   `C = P[n]` (new ring), `j1 = (j + 1) & 15`:
+   - `shade = trunc((1 − t)·A + t·B)` (once per segment).
+   - colour byte `k` (k = 0..31) of slot p: `x = (n + k) & 31; tri = x < 16 ? x : 31 − x;
+     byte = (tri + shade) & 63`. Only bytes 0..15 are read (by point index j), so point j of
+     ring p gets `(tri((n + j) & 31) + shade) & 63` with `n = p + 1`: a triangle wave around the
+     ring that shifts by one per segment → diagonal (spiral) stripes through the 64-colour ramp.
+   - plane 2j (triangle `Pv[j], C[j1], Pv[j1]`): `N = normalize((C[j1] − Pv[j]) × (Pv[j1] − C[j1]))`,
+     `d = −N·Pv[j]`.
+   - plane 2j+1 (triangle `Pv[j], C[j], C[j1]`): `N = normalize((C[j] − Pv[j]) × (C[j1] − C[j]))`,
+     `d = −N·Pv[j]`.
+   - The normals point into the tube (the replay finds the axis on the positive side of every
+     plane; the collision 0x43637c treats `N·x + d − 1.5 ≤ 0` as a hit).
+   - `t += 0.1`; when `t > 1`: `t = 0, A = B, B = rand() & 63` (a new shade target every ~11
+     segments).
+4. `w += 1`.
+5. **Turn angles**, each of `a, b, c` independently:
+   - normally `angle += u × 6.10352e-5` (a uniform step in [−1°, +1°)): a random walk of the
+     *curvature*, so the tunnel meanders and corkscrews;
+   - final stream and `w > 168`: the angle moves 1° towards 0 per segment (the tunnel straightens
+     before the planet);
+   - then `if |angle| > max_turn: angle ×= 0.8`.
+6. **Radius**: `radius += u × 6.10352e-5` (±1 per segment), clamped to `[min, max]`
+   (below min → min, above max → max). The radius of ring n is the value *before* this update.
+
+Order of `rand()` calls per call (for exact replays): light test (+4 if a light spawns), 32 jitter
+values (jx, jz per point), new shade target when `t` wraps, 3 angles in the order c (0x5204fc),
+a (0x520500), b (0x520504), radius. The initial seed is not set by
+the stream (❓ Watcom default 1 unless `srand` was called earlier).
+
+### Spine and camera ✅
+
+- **Spine** (0x436668): `spine(s) = O[i] + (O[i+1] − O[i]) · (s − i)`, `i = trunc s` (centres
+  only, no orientation).
+- **Camera position** (0x4352ac), with Kurt's world position `K` (obj+0x10) and his segment
+  coordinate `s`:
+  ```
+  A = spine(s − 0.75)
+  B = spine(s + 2)
+  B' = B + 1.375 · (K − B)
+  eye = 0.4 · A + 0.6 · B'        (= 0.4 A − 0.225 B + 0.825 K)
+  ```
+  About 0.75 segment (7.5 units) behind Kurt, and 0.825 × his off-axis offset towards his side.
+- **Orientation** (0x436828): `target = spine(s + 2)`; `f = normalize(target − eye)`;
+  `right = normalize(up × f)`; `up = f × right`, where `up` (0x491cf8) persists from frame to
+  frame (starts (0, 0, −1), i.e. it is the screen-down axis): the camera follows the tunnel with
+  parallel-transported roll, it never snaps to world up. View rows: `right`, `up` (down on
+  screen), `f`; translation `−row·eye`.
+- **Projection**: zoom 0x57391c = 2.4, screen 600 × 360, centre (300, 180):
+  `sx = 300 + 250 · x/z`, `sy = 180 + 250 · y/z` (focal 250 px on both axes, square pixels:
+  horizontal FOV 100.4°, vertical 71.5°). Near plane z = 0.05 (triangles are clipped there,
+  0x43731c).
+
+### Drawing (0x43592c, each frame) ✅
+
+Order: BG blit (0x438bfc) → begin scene → 0x436b00 (tunnel + objects) → end scene → HUD. No
+z-buffer is relied on: everything is painter-sorted back to front.
+
+#### Background (0x438bfc)
+
+`BG` (600×360, palette indices 1–255, a nebula) scrolls toroidally. Kept offsets `bx` (0x491d2c)
+and `by` (0x491d30); with the current view rows `r, u, f` and last frame's `r', u', f'` (0x491d34):
+```
+by = trunc(by + 180 · (u.z·f'.z − f.z·u'.z))      then wrapped to 0..359
+bx = trunc(bx + 300 · (r.x·u'.x − u.x·r'.x))      then wrapped to 0..599
+```
+(pitch changes scroll vertically, roll changes horizontally; world-axis specific, a cheap
+approximation.) Screen pixel (px, py) shows `BG[(px + bx) mod 600, (py + by) mod 360]` (drawn as
+up to 4 blits). In the stereo mode (0x574318) `bx` is shifted by the eye offset 0x491cc8.
+
+#### Tunnel (0x436b00)
+
+1. Projects the newest ring `w − 1`; its vertex colour values are all `−0x545` (ramp colour 0,
+   level 5).
+2. For each slot `n` from `w − 2` down to `r` (far to near), with `d = n − r` (0..29):
+   - distance level `k`: d ≥ 26 → 5, 21–25 → 4, 16–20 → 3, 11–15 → 2, 6–10 → 1, ≤ 5 → 0;
+   - projects ring n; vertex colour value of point j = `−(0x405 + 64k + colour[n][j])`, i.e.
+     entry `64k + colour` of the RGBA table (the vertices of ring n+1 keep the values computed one
+     iteration earlier, with the farther level, so alpha is Gouraud-blended between levels);
+   - 32 triangles, for j = 0..15 (j1 = (j + 1) & 15), older ring `Pv = ring n`, newer `C = ring n+1`:
+     `(Pv[j], C[j1], Pv[j1])` with plane 2j, then `(Pv[j], C[j], C[j1])` with plane 2j+1;
+     a triangle is skipped when the eye is on the negative side of its plane (`N·eye + d < 0`,
+     0x4372c0) — only the inside of the tube is drawn;
+   - Gouraud triangles (0x43731c → 0x471c20), vertex colour = RGBA table entry, alpha-blended
+     over what is behind;
+   - then the objects of segment n (0x40b990, depth-sorted list): models (Kurt, Bones, Gunta,
+     SWH150...) through 0x43b104, sprites through 0x436f10 (LIGHT) or 0x4371f0 (PLANET).
+3. Total: 30 segments × 32 triangles = 960 triangles per frame.
+
+#### Colours
+
+- **Ramp** (0x433b50 from the table at 0x491ccc): a start colour then 8 keys of 8 steps each,
+  bytes stored B, G, R (the engine's RGBQUAD order: the D3D vertex colour puts byte 0 in the low
+  (blue) byte, and the software blend table blends byte 0 with the palette's blue):
+
+  ```
+  0x491ccc: 5a ce de 00 | 21 7b 8c 08 | 08 31 7b 08 | 84 a5 c6 08 | 8c 7b 84 08
+            e7 c6 d6 08 | 84 a5 c6 08 | 08 31 7b 08 | 5a ce de 08 | 00 00 00 00
+  ```
+  Keys as RGB: start (222, 206, 90) gold → (140, 123, 33) olive → (123, 49, 8) rust →
+  (198, 165, 132) tan → (132, 123, 140) grey-violet → (214, 198, 231) lavender → (198, 165, 132)
+  → (123, 49, 8) → (222, 206, 90). Entry `i` of a key with `n = 8` steps: `c = (key·i + prev·(8 − i)) / 8`
+  (integer division), i = 0..7 — ramp[0] = gold, ramp[8] = olive, ..., ramp[56] = rust, ramp[63]
+  = 7/8 of the way back to gold; it wraps smoothly (the colour byte is `& 63`).
+- **Alpha per distance level** k = 0..5: 0x5A, 0x55, 0x50, 0x3C, 0x28, 0x0F (35 %, 33 %, 31 %,
+  23 %, 16 %, 6 %): the tube is faint and fades into the nebula with distance.
+- Blend: `out = dst + (ramp − dst) · a / 256` (the software tables 0x5738e4, level k at
+  `+0x4000·k + 0x100·c`, map each of the 256 palette colours to the nearest palette index of
+  this blend, 0x4081a4; the D3D path uses the same RGBA with vertex alpha, state flag 2 in
+  0x471290 ❓ presumably SRCALPHA/INVSRCALPHA).
+- The tunnel ignores the palette (direct colours in D3D).
+
+#### Light sprites (0x434f64 spawn, 0x43596c move, 0x436f10 draw)
+
+3 in 4 new segments get one, in segment `p`: local position `(u/4096, (s − trunc s)·10, u/4096)`
+(x, z uniform in ±4, on the ring plane), size `4 + rand()/8192` (4..8), speed `−3 − rand()/8192`
+(−3..−7 segments/s: they fly back towards and past Kurt). Each frame `s += speed·dt`; the world
+position is `M[trunc s] · (x, (s − trunc s)·10, z)`; freed when `s` leaves `[r, w)`. Drawn as a
+screen-aligned textured quad (`LIGHT`, 64×64, indices 0–63 of the global palette, index 0
+transparent ❓) centred on the projected point, half-size `trunc(250·size/z) >> 3` pixels (world
+width ≈ size/4 = 1..2 units), not drawn when z < 0.05, clipped to the 600×360 screen.
+
+#### Planet (final stream only, 0x4350dc, 0x4371f0)
+
+Spawned once when the generator passes segment 186, at segment `w − 3` on the axis
+(local (0, 0, 0)), size 36. Drawn as a 2D scaled sprite (0x404690) centred on the projected
+point: scale `f = trunc(250·36/z)`, drawn size `128·f/256` pixels (world diameter 18 units); not
+drawn when z < 0.05.
+
+### Palette and fades (0x4352ac) ✅
+
+`T` = 0x520860 (starts 0). While `T ≠ 1` or the stream is ending (0x52050c):
+- **start**: `T += dt`; at `T ≥ 1`: `T = 1`, palette = 0–63 global, 64–255 PAL (0x4148d0).
+  Before that each component `c` of 0x52051c becomes:
+  - normal stream, alive: `trunc(c·T + 255·(1 − T))` (fades in from white);
+  - final stream: `trunc(c·T)` (from black);
+  - dead (health ≤ 0), `T ≤ 1`: R = `trunc(256·T)` (byte, so 0 at T = 1), G, B = `trunc(c·T)`;
+    `T > 1` (set to 2 on death in the final stream): R = `min(255, R + trunc((2 − T)·255))`, G, B
+    unchanged (a red flash).
+- **end** (0x52050c set): `T −= dt` with the same formulas; at `T < 0` the whole palette is set to
+  white (normal stream, alive) or black, and the state ends.
+- ❓ In the D3D build these fades only affect palette-based surfaces; the BG surface is converted
+  once at init and the tunnel uses direct colours, so how visible the fade is there is unverified.
+
+### Open questions (tunnel) ❓
+
+- Blend state of the tunnel triangles (flag 2 of 0x471290) and of the LIGHT texture (flag 1): alpha
+  blending assumed from the software tables.
+- Screen-y sign of the projection (row 1 of the view = (0, 0, −1) initially suggests y grows
+  downward with world +Z up on screen).
+- The rand seed at the start of the stream.
+- Colour bytes 16–31 of each segment are written but never read.
+
+### Gameplay
+
+### Globals ✅
+
+| Address | Meaning |
+| --- | --- |
+| `0x574324` | health (the game's health, carried in from the level and out to the next state) |
+| `0x574268` | level index `i` (0–5); `0x520894 = (i > 3)` selects the **Gunter variant** |
+| `0x57423e` | difficulty (0 easy, 1 normal, 2 hard) |
+| `0x51a274` | `tail` — oldest live segment (Kurt's segment is about `tail + 1`) |
+| `0x51a278` | `head` — number of segments generated (next one to generate); ring of 32 (`& 0x1f`) |
+| `0x51fa7c` + 0x30·(s & 31) | segment `s` matrix (3×4, row-major, translation in [3], [7], [11]) |
+| `0x51ba7c` + 0x200·(s & 31) | segment `s` wall planes: 32 × (nx, ny, nz, w) |
+| `0x52047c` + 4·(s & 31) | per-segment object lists (linked through obj+0) |
+| `0x520878` | Kurt |
+| `0x520884` | Bones (null until the rescue) |
+| `0x52088c` | the `SWH150` pickup (normal variant) |
+| `0x52087c` | `GUNTA` (Gunter carrying Bones; Gunter variant) |
+| `0x520888` | the planet sprite (Gunter variant, end of the tube) |
+| `0x520880` | handled by `0x43650c` (a ship keeping ≥ 5 segments ahead of Kurt) but **never assigned** |
+| `0x52050c` | "ending" flag (fade out, then leave) |
+| `0x520860` | fade level `f` (0 at start, 1 = normal, 2 on death) |
+| `0x491cf4` | frame counter (objects store it at obj+0x11c so a relinked object isn't updated twice) |
+| `0x50151c`, `0x501520` | yaw rate, pitch rate (°/s), from `0x40934c` |
+| `0x520898`, `0x52089c`, `0x5208a0` | tunnel bend limit, radius min, radius max (see below) |
+
+Stream object layout (0x32e bytes, pool of 399 at `0x523504`, "No Aliens available in stream" if
+exhausted): +0 next, +4 (u16) segment `& 31`, +0xc model instance (0 = sprite), +0x10..0x18 world
+position, +0x1c/+0x20/+0x24 local offset (x across, y along, z across) in the segment frame,
++0x28..0x30 Kurt's smoothed direction, +0x34 speed (segments/s), +0x4c yaw, +0x54 roll, +0x58
+scale, +0x5c `t` (position along the tube in segments, float), +0xac world matrix, +0x108 sprite
+(image struct) for sprite objects, +0x114 animation, +0xdc/+0xe0/+0xe4/+0x118 animation time,
+rate (30), frame, hold (see engine.md), +0x13c pitch, +0x148 flags (8 = animation loops), +0x180
+previous position. ✅
+
+### Init (0x433b50) ✅
+
+- Loads `STREAM/STREAM.MTI` and `STREAM/STREAM.BNI`. Working palette `0x52051c`: colours 0–63 =
+  the system palette `0x5735e4`, 64–255 = `PAL` (bytes 192…767). Images: `BG` (600×360, the
+  scrolling background), `PLANET` (128², `0x520850`), `LIGHT` (64², `0x520890`, wrapped in the
+  sprite struct `0x57f870`, 64×64).
+- Sounds (volume 0x7fff): `WIND` (looping, **started at once** and stopped in the cleanup, volume
+  never changed), `HITSIDE`, `RESCUE`, `APPLE`, `HURT1`–`HURT7`.
+- Models: `KURT`, `BONES`, `PROFSHIP` (unused), and `SWH150` or (Gunter variant) `GUNTA`.
+  Animations: `KURTANIM` (199 frames), `BONESANIM` (111 frames; tracks for the crane, rope, Bones
+  *and* Kurt's parts), `SWHANM` (10 frames) or `GUNTANIM` (100 frames; Gunter + Bones parts),
+  `FL_HVR`, `FL_WAVE` (loaded, never used — the professor's ship is dead content).
+- Difficulty (with `h = i >> 1`, integer):
+
+  | Difficulty | `0x520898` bend limit | `0x52089c` radius min | `0x5208a0` radius max |
+  | --- | --- | --- | --- |
+  | easy | i + 6 | 10 − h | 17 − h |
+  | normal | i + 8 | 10 − h | 17 − i |
+  | hard | i + 10 | 10 − h | 13 − h |
+
+  (Used by the generator: per-segment turn angles random-walk by ±1 and are scaled × 0.8 when
+  |angle| exceeds the limit; the radius `0x520508`, starting at 10, random-walks by ±1 and is
+  clamped to [min, max]. Geometry is documented separately.)
+- `tail = head = 0`, generator called 31 times → `head = 31`. The first call builds only the ring
+  of points; each later call also spawns a light (see below), so ~22 lights exist at the start.
+- Camera state reset; up vector `0x491cf8` = (0, 0, −1) initially (persists).
+- **Kurt**: `t = tail + 0.75 = 0.75`, segment 0, yaw 90, pitch 0, roll 0, scale 1, local x = z = 0,
+  direction +0x28 = (0, 1, 0), speed 6, `KURTANIM` looping at 30 fps.
+- **Normal variant** — `SWH150`: `t = 16`, segment 16, yaw 0, speed **5.48**, `SWHANM` looping,
+  x = z = 0 (on the axis).
+- **Gunter variant** — `GUNTA`: `t = 5`, segment 5, yaw 90, speed **6**, `GUNTANIM` looping.
+- `f = 0`, `0x52050c = 0`. Game state `0x574262 = 5`.
+
+### Per-frame update (0x4352ac) ✅
+
+In order:
+
+1. `frame_counter++`.
+2. **Rescue / end check** — only if `health > 0` and (`tail > 177` or `health == 1`):
+   - Normal variant, Bones not yet there: spawn **Bones** (see Rescue), play `RESCUE` (only if not
+     already playing).
+   - If Bones exists and Bones' frame (+0xe4, s16) `> 80`: `ending = 1`.
+   - Gunter variant: if `head >= 186`: `ending = 1` (always true by then, since the tube stops
+     being extended at 187 — so in practice the Gunter stream also ends at `tail > 177`).
+3. **Fade** (skipped when `f == 1` and not ending):
+   - Not ending: `f += dt`; at `f >= 1`: `f = 1`, set the plain palette (0x4148d0), no effect.
+   - Ending: `f −= dt`; when `f < 0`: set every palette entry to **white** (255) if normal variant
+     and `health > 0`, else **black**, and **return 1** (the stream is over, nothing else this
+     frame).
+   - Palette effect for `0 ≤ f < 1` (or `f > 1`), per byte `c` of the working palette:
+     - `health > 0`, normal variant: `c' = trunc(c·f + 255·(1 − f))` — fades from/to **white**.
+     - `health > 0`, Gunter variant: `c' = trunc(c·f)` — fades from/to **black**.
+     - `health ≤ 0` (death, only possible in the Gunter variant): if `f > 1`: red
+       `= min(255, r + trunc((2 − f)·255))`, g, b unchanged (a red flash rising for 1 s); if
+       `f ≤ 1`: red = `trunc(256·f)` (as a byte), g = `trunc(g·f)`, b = `trunc(b·f)` (red to black
+       in 1 s).
+   So the stream fades in from white (normal) or black (Gunter) over **1 s**, and fades out over
+   1 s (2 s with the red flash on death).
+4. **Objects**: for each segment `s` from `tail` to `head − 1`, for each object in list `s` not yet
+   updated this frame: Kurt → `0x435c4c`; `0x520880` → `0x43650c` (never); Gunter → `0x435a34`;
+   SWH150 → `0x435b18`; Bones → skipped; anything else (lights, planet) → `0x43596c`.
+5. Bones (if any) → `0x4364bc`.
+6. **Camera** (see below), sound listener update (`0x403348` with the camera matrix).
+7. Draw (if `0x5742a4`): `0x43592c`; in the stereo mode (`0x574314`) drawn twice with the eye moved
+   ±0.25 u along the camera's right axis.
+8. `timer_frame`; return 0.
+
+#### Tube helpers ✅
+
+- `centre(t)` (0x436668): `s = floor(t)`, `u = t − s`; linear interpolation between the
+  translations of segment matrices `s` and `s + 1`.
+- `frame(t, t + 1)` (0x4366f4): origin `centre(t)`; forward `Y = normalize(centre(t+1) − centre(t))`;
+  `X = normalize(Y × (−camera_up))` with `camera_up` = the camera matrix row `0x573984` (the
+  previous frame's); `Z = X × Y`. Columns X, Y, Z, origin.
+- Objects other than Kurt are placed at `segment_matrix[floor(t)] · (x, 10·(t − floor(t)), z)`.
+- Relink (0x436440): moves the object to list `floor(t)`; if `floor(t) < tail` or `≥ head` it
+  fails and the object is freed.
+
+#### Kurt (0x435c4c) ✅
+
+`controlled = (Bones == null) and (health > 0)`.
+
+1. **Input** (0x40934c): yaw rate `= +180` if `0x57eb30`, else `−180` if `0x57eb34`, else
+   `−180 · 0x57ea18` (analog x); pitch rate `= +180` if `0x57eb38`, else `−180` if `0x57eb3c`, else
+   `−180 · 0x57ea1c` (analog y). Same key variables as the fall (left/right/up/down ❓ — in the fall
+   eb30/eb34 are −x/+x). Units °/s.
+2. **Speed**: if `speed < 6`: `speed = min(speed + 1·dt, 6)` (accelerates 1 segment/s² back to
+   6 segments/s = 60 u/s).
+3. `t += speed · dt`.
+4. **Advance**: if `t − 0.75 > tail + 1`: relink Kurt (and Bones) to segment `tail + 1`,
+   `tail++`, generate one new segment (`0x434838`). Hence `head − tail = 31` while generating and
+   Kurt stays ~1.75 segments after `tail`.
+5. Animation update.
+6. `F = frame(t, t + 1)`.
+7. Drift:
+   - controlled: `v = normalize(0.75·v + 0.25·F.Y)` (a lagging copy of the tube direction);
+     `x += 100 · dt · (v · F.X)`, `z += 100 · dt · (v · F.Z)` — when the tube bends Kurt keeps going
+     straight and drifts toward the outer wall.
+   - not controlled: `x` and `z` each move toward 0 at 6.25 u/s (clamped at 0).
+8. **Yaw** (+0x4c, neutral 90):
+   - controlled and rate < 0: `yaw = max(yaw + rate·dt, 45)`;
+   - controlled and rate > 0: `yaw = min(yaw + rate·dt, 135)`;
+   - otherwise back toward 90 at 180°/s (clamped at 90).
+
+   **Pitch** (+0x13c, neutral 0): same with limits −45 / +45, back toward 0 at 180°/s.
+   Full deflection takes 0.25 s.
+9. Steering motion: if `yaw ≠ 90`: `x += cos(yaw) · 25 · dt`; if `pitch ≠ 0`:
+   `z += sin(pitch) · 25 · dt` (max ±17.7 u/s sideways). So +yaw rate (→ 135) moves −x, +pitch
+   rate moves +z.
+10. Previous position → +0x180. Model matrix = `F · R(roll, pitch, yaw, scale 1, translation
+    (x, y = 0, z))` (0x46dfe8 then 0x46dba0); position = its translation.
+11. **Wall collision** (controlled only), `0x43637c(position, t)`: planes of segment `floor(t)`
+    (32). For each plane in order: `d = n·p + w − 1.5`; at the first with `d ≤ 0` return
+    `k = d / (n · (p − centre(t)))` (the fraction of the way to the tube centre that puts Kurt
+    back 1.5 u inside that wall); no plane → −1. If `k ≥ 0` (hit):
+    - `r = sqrt(x² + z²)`; `yaw = 90 + 45·x/r`; `pitch = −45·z/r` (Kurt is turned to face back
+      toward the centre at full deflection, so step 9 carries him inward next frames);
+    - `x *= 1 − k`, `z *= 1 − k`; the matrix translation is recomputed with the old rotation;
+    - sounds: `HITSIDE` (only if not already playing) and one of `HURT1`–`HURT7` at random
+      (`rand_n(7)`, restarted);
+    - **damage** if `health > 0`: easy −2, normal −(2 + rand_n(2)) = −2/−3, hard
+      −(4 + 2·rand_n(2)) = −4/−6. If then `health < 1`: normal variant → `health = 1` (which
+      triggers the rescue next frame); Gunter variant → `health = 0`, `ending = 1`, `f = 2`
+      (death: red flash, fade to black, then game over);
+    - `speed *= 0.9`, minimum 4.5.
+
+    The test runs every frame, so grinding along a wall hurts repeatedly (HITSIDE isn't
+    restarted, HURT is).
+
+#### Lights (spawned by the generator, updated by 0x43596c) ✅
+
+- Each generator call after the first (i.e. every new segment) frees every object still in the
+  reused slot `head & 31`, then with probability 3/4 (`rand() & 3 ≠ 0`) calls
+  `0x434f64(t = head − 1, pos = null, speed = −3)`:
+  - sprite (`model = 0`, image struct `0x57f870` = `LIGHT` 64×64), scale (+0x58)
+    `4 + rand()/8192` (4–8);
+  - `x = (rand() − 16384)/4096`, `z = (rand() − 16384)/4096` (±4 u off the axis);
+  - speed `−3 − rand()/8192` (−3 … −7 segments/s: they fly toward Kurt, i.e. 9–13 segments/s
+    relative to him).
+  (0x434f64 also accepts a given position and a positive speed; only this call exists.)
+- Update: `t += speed·dt`, relink (freed once behind `tail`), position = segment matrix ·
+  `(x, 10·frac(t), z)`; only the translation of +0xac is refreshed. No interaction with Kurt.
+
+#### SWH150 — the health bonus (normal variant, 0x435b18) ✅
+
+A walking "super health" (7-track model, `SWHANM` 10 frames looping) running down the tube's axis
+ahead of Kurt: `t += 5.48·dt`, relink (freed if it leaves the ring), animation, oriented by
+`frame(t, t + 1)`, placed on the axis. If `|position − Kurt.position| < 5`: **health = 150**
+(above the usual 100), `APPLE` (restarted), freed.
+
+Timing: it starts 15.25 segments ahead and Kurt gains 0.52 segments/s at full speed, so it's caught
+after ≈ 28–29 s — just before the rescue at `tail > 177` (≈ 29.8 s), and only if Kurt never lost
+speed on a wall (each hit × 0.9) and is within 5 u of the axis. A no-hit bonus.
+
+#### Rescue — Bones (normal variant) ✅
+
+Trigger (frame step 2): `health > 0` and (`tail > 177` or `health == 1`), i.e. after ≈ 30 s, or at
+once when a hit leaves Kurt at 1 (or when he arrives with 1 health).
+
+- Bones object allocated at Kurt's `t` and segment; copies Kurt's matrix (+0xac), position, yaw,
+  pitch, roll; scale 1; model `BONES`.
+- Both Kurt and Bones get `BONESANIM`, frame −1, time 0, hold −2 (no hold), rate 30; Kurt's
+  loop flag is cleared (plays once). The animation contains the crane, the rope, Bones and Kurt's
+  body, so the two models play one shared scene at Kurt's transform.
+- Each frame after the object loop (0x4364bc) Bones copies Kurt's position and matrix and advances
+  its animation. Kurt is no longer controlled: he drifts back to the axis (6.25 u/s), yaw/pitch
+  return to neutral, no collisions; he keeps flying at up to 6 segments/s.
+- When Bones' frame exceeds 80 (≈ 2.7 s): `ending = 1` → 1 s fade to white → leave.
+
+#### Gunter variant (index 4, after LEVEL8) ✅
+
+- No SWH150 and no rescue. `GUNTA` (Gunter holding Bones; `GUNTANIM` looping) flies along the axis
+  from `t = 5` at a constant 6 segments/s (0x435a34: move, relink — freed and nulled when it leaves
+  the ring —, animate, orient by `frame(t, t + 1)`, place on the axis). Kurt, also at 6, keeps the
+  distance only if he never hits a wall. No interaction.
+- The generator: from `head > 168` the turn angles are pulled toward 0 by 1 per segment (the tube
+  straightens); when called with `head > 186` it no longer builds segments (head stays 187) and,
+  once, spawns the **planet** (`0x4350dc(t = head − 3 = 184)`): a sprite, `PLANET`, scale 36, on
+  the axis, speed 0 (static). It's seen at the end of the straight tube.
+- End: `tail > 177` (and `head ≥ 186`) → `ending` → 1 s fade to **black** → leave.
+- Health can reach 0 here: death sets `ending` and `f = 2` → 1 s red flash, 1 s red-to-black,
+  then game over.
+
+#### Camera (in 0x4352ac, 0x436828) ✅
+
+- `A = centre(t − 0.75)`, `B = centre(t + 2)` (Kurt's `t`);
+  `B' = B + 1.375 · (Kurt.position − B)` (on the line from B through Kurt, 37.5 % past him);
+  `camera = 0.4·A + 0.6·B'`.
+- Looks at `centre(t + 2)`: `fwd = normalize(target − camera)`, `right = normalize(up × fwd)`,
+  `up = fwd × right` with `up` persistent across frames (starts at (0, 0, −1)). Rows right / up /
+  fwd go to `0x573974` / `0x573984` / `0x573994`.
+- Projection: zoom 2.4 (`0x57391c`), 600 × 360 view, centre (300, 180). (Drawing is documented
+  separately.)
+
+#### HUD ✅
+
+The shared level overlays: messages (0x425474) and the health box (0x420830: `SC_STAT` bottom
+right, digits `SNIP_TXT`; the number blinks when health ≤ 20). The stream's BNI has its own copies of
+`SC_STAT`, `SC_BSTAT`, `SNIP_TXT`. No other HUD. The background `BG` is scrolled by the camera
+angles (0x438bfc, wraps at 600 × 360).
+
+### The end (main loop 0x401cb8, state 5) ✅
+
+When 0x4352ac returns 1: `0x46f8a0`, cleanup `0x435210` (stops `WIND`, frees models and objects),
+then:
+
+- `health < 1` → game over (0x42618c(1), back to the menu);
+- `i < 4` → statistics (state 6, `0x431b00(0)`, starting at the intermission) — health (possibly
+  150) carries over;
+- else `i = 5`, `0x42b520(1)` (❓ a save/prompt helper), state 7: LEVEL5 loads directly.
+
+### Timeline (normal variant, no hits) ✅ (derived)
+
+| Time | Event |
+| --- | --- |
+| 0–1 s | fade in from white; Kurt at 60 u/s; lights stream past |
+| ≈ 28.4 s | SWH150 caught (health 150, `APPLE`) |
+| ≈ 29.8 s | `tail` = 178: Bones + `RESCUE`, `BONESANIM` on Kurt and Bones |
+| + 2.7 s | Bones frame > 80: fade to white 1 s |
+| ≈ 33.5 s | statistics |
+
+### Open questions (gameplay) ❓
+
+- Physical keys behind `0x57eb30`…`0x57eb3c` (and whether the analog signs make "left" steer left
+  on screen); the sign convention of 0x46dfe8's yaw/pitch.
+- `0x42b520(1)` after the Gunter stream.
+- `PROFSHIP`, `FL_HVR`, `FL_WAVE` and `0x43650c` (keeps an object ≥ 5 segments ahead of Kurt at
+  his speed, oriented by the tube frame, placed at `seg_matrix · (x, 10·frac, z)`) are unused:
+  `0x520880` is only read.
+- Palette effect for death at exactly `f = 1`: `trunc(256)` wraps to red 0 for one frame.
 
 ## Saving and loading (`savegame.c`, `optload.c`)
 

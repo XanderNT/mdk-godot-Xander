@@ -167,9 +167,7 @@ var _crawler: Array[Texture2D] = []
 var _crawler_frame := 0.0
 
 # The HUD (0x420830, 0x46cce4).
-var _panel: Texture2D
-var _digits: Texture2D
-var _digit_height := 0
+var _health_box := HealthBox.new()
 var _icons: Array[Texture2D] = []
 var _icon_hotspots: Array[Vector2i] = []
 var _skull: Texture2D
@@ -219,10 +217,7 @@ func _load() -> void:
 			_pickup_names.push_back(_bni.bytes.slice(offset, offset + 12).get_string_from_ascii())
 			offset += 12
 	_messages.setup(_fti, _palette)
-	_panel = HUD._make_texture(_bni.get_image("SC_STAT"), _palette)
-	var digits := _bni.get_image("SNIP_TXT")
-	_digits = HUD._make_texture(digits, _palette)
-	_digit_height = digits.height
+	_health_box.setup(_bni, _palette)
 	var pickups := _bni.get_animation("PICKUPS")
 	for i in pickups.frame_count:
 		_icons.push_back(HUD._make_texture(pickups.get_frame(i), _palette))
@@ -995,10 +990,7 @@ func _draw_hud() -> void:
 		var extent := _skull.get_size() * minf(_red * 255.0 / 256.0, 1.0)
 		_hud.draw_texture_rect(_skull, Rect2(Vector2(width * 0.5, 180.0) - extent * 0.5, extent), false)
 	_messages.draw(_hud, width)
-	var panel := Vector2(width - (_panel.get_width() + 16), VIEW_HEIGHT - (_panel.get_height() + 10))
-	_hud.draw_texture(_panel, panel)
-	if health > 20 or _blink < 16:
-		_draw_number(mini(health, 999), panel + Vector2(_panel.get_width() >> 1, (_panel.get_height() - _digit_height) >> 1))
+	_health_box.draw(_hud, width, health, _blink)
 	if _inventory_ticks > 0:
 		for i in inventory.slots.size():
 			var slot := inventory.slots[i]
@@ -1009,12 +1001,5 @@ func _draw_hud() -> void:
 			_hud.draw_texture(_icons[frame], position - Vector2(_icon_hotspots[frame]))
 			var count := inventory.super_chain_gun if slot.item == KurtInventory.Item.SUPER_CHAIN_GUN else slot.count
 			if count > 1:
-				_draw_number(count, position - Vector2(0, 12))
+				_health_box.draw_number(_hud, count, position - Vector2(0, 12))
 
-
-func _draw_number(value: int, position: Vector2) -> void:
-	var text := str(value)
-	var x := position.x - 4 * text.length()
-	for c in text:
-		_hud.draw_texture_rect_region(_digits, Rect2(x, position.y, 8, _digit_height), Rect2(int(c) * 8, 0, 8, _digit_height))
-		x += 8

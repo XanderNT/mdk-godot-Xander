@@ -38,6 +38,8 @@
 - The fall before each level (`FALL3D`): the intro in space, the ground with the minecrawler and
   its track, the haze, steering, radars, homing missiles, pickups with chutes, Bones, the palette
   effects, death; the health and pickups carried into the level.
+- The stream after each level (`STREAM`): the generated tube, Kurt's steering and the walls, the
+  lights, the `SWH150` bonus, Bones' rescue, Gunter and the planet after LEVEL8, the fades.
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
@@ -55,8 +57,7 @@
 3. **Sound**: SNI sounds, arena sounds, music, footsteps.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.
-5. **Level flow**: the stream between levels
-   (`STREAM`), F2 snapshots and the save prompt after a level.
+5. **Level flow**: F2 snapshots and the save prompt after a level.
 
 ## Menu
 
