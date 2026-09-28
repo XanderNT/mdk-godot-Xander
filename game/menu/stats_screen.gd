@@ -56,6 +56,7 @@ var _fade_out := -1.0
 var _fade_color := Color.BLACK
 var _fast := false
 var _skip := false
+var _prompt: SavePrompt
 var _pressed := false
 var _ticks := 0.0
 var _sounds := {}
@@ -199,6 +200,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if _prompt:
+		return
 	_fast = _skip or Input.is_action_pressed(&"fire") or Input.is_action_pressed(&"jump")
 	var speed := 2.0 if _fast else 1.0
 	_ticks += delta * 30.0
@@ -235,9 +238,15 @@ func _update_page(delta: float, speed: float) -> bool:
 
 func _next_phase() -> void:
 	if _phase == Phase.SCORE:
-		# The index moves on to the next level (the original then offers to save).
+		# The index moves on to the next level, which can be saved (named after its number).
 		_index = mini(_index + 1, GameState.ORDER.size() - 1)
 		GameState.level = GameState.ORDER[_index]
+		_prompt = SavePrompt.new()
+		add_child(_prompt)
+		_prompt.open(_fti, GameState.KIND_BEFORE_LEVEL, str(_index + 1))
+		await _prompt.closed
+		_prompt.queue_free()
+		_prompt = null
 	if _phases.is_empty():
 		briefing_only = false
 		# The fall comes after every briefing (LEVEL5 has none).

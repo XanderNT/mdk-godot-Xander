@@ -647,5 +647,10 @@ func _finish() -> void:
 		StatsScreen.briefing_only = false
 		get_tree().change_scene_to_file("res://game/menu/stats_screen.tscn")
 		return
+	# The last level, which can be saved (at its start).
 	GameState.level = GameState.ORDER[_index + 1]
+	var prompt := SavePrompt.new()
+	add_child(prompt)
+	prompt.open(MDKFti.load_file(MDKData.path("MISC/MDKFONT.FTI")), GameState.KIND_LEVEL_START, str(_index + 2))
+	await prompt.closed
 	get_tree().change_scene_to_file("res://game/main.tscn")

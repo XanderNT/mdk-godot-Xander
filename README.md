@@ -28,7 +28,7 @@ there's no release. See [the roadmap](docs/roadmap.md).
 | Chain gun, items, sniper mode, air strike | █████████░ 90% |
 | HUD, menus, options, key bindings | ████████░░ 80% |
 | Sound and music | ██████░░░░ 60% |
-| Level flow: briefing, statistics, saves | ███████░░░ 70% |
+| Level flow: briefing, statistics, saves | ████████░░ 80% |
 | The fall (`FALL3D`) and the stream between levels | █████████░ 90% |
 | End videos, enhanced graphics mode | ░░░░░░░░░░ 0% |
 | **Overall** | **about 75%** |

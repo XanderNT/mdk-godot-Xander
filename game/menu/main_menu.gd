@@ -98,8 +98,15 @@ func _show_saves() -> void:
 
 
 func _load(save_name: String) -> void:
-	if GameState.load_game(save_name):
-		get_tree().change_scene_to_file("res://game/main.tscn")
+	if not GameState.load_game(save_name):
+		return
+
+	# A save made before a level shows its briefing and the fall first.
+	if int(GameState.read_game(save_name).get("type", GameState.KIND_LEVEL_START)) == GameState.KIND_BEFORE_LEVEL:
+		StatsScreen.briefing_only = true
+		get_tree().change_scene_to_file("res://game/menu/stats_screen.tscn")
+		return
+	get_tree().change_scene_to_file("res://game/main.tscn")
 
 
 func _show_options() -> void:

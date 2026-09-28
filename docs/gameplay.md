@@ -314,8 +314,8 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
 - **In the port**: the order of play, the loading screen (`LoadingScreen`), the end of level
   (`MDKEndLevel`), the statistics, debriefing and briefing (`StatsScreen`: after a level below
   index 4, and the briefing alone for a new game), the fall after every briefing (`MDKFall`), then
-  the next level; the stream after every level but the last (`MDKStream`). The save prompt after
-  the Score-O-matic isn't done. The Score-O-matic's counts
+  the next level; the stream after every level but the last (`MDKStream`); the save prompt
+  (`SavePrompt`). The Score-O-matic's counts
   (`GameState.stats`) are cleared when a level starts.
 
 ### Statistics and briefing (state 6)
@@ -1185,7 +1185,7 @@ then:
 - `health < 1` → game over (0x42618c(1), back to the menu);
 - `i < 4` → statistics (state 6, `0x431b00(0)`, starting at the intermission) — health (possibly
   150) carries over;
-- else `i = 5`, `0x42b520(1)` (❓ a save/prompt helper), state 7: LEVEL5 loads directly.
+- else `i = 5`, the save prompt (`0x42b520(1)`, type 3), state 7: LEVEL5 loads directly.
 
 ### Timeline (normal variant, no hits) ✅ (derived)
 
@@ -1201,7 +1201,6 @@ then:
 
 - Physical keys behind `0x57eb30`…`0x57eb3c` (and whether the analog signs make "left" steer left
   on screen); the sign convention of 0x46dfe8's yaw/pitch.
-- `0x42b520(1)` after the Gunter stream.
 - `PROFSHIP`, `FL_HVR`, `FL_WAVE` and `0x43650c` (keeps an object ≥ 5 segments ahead of Kurt at
   his speed, oriented by the tube frame, placed at `seg_matrix · (x, 10·frac, z)`) are unused:
   `0x520880` is only read.
@@ -1239,9 +1238,20 @@ then:
   "No Saved Games Found", `SVBAD` "Invalid/Corrupt File"; the preview is `MISC/LOAD_n.LBB` (n from
   {7, 6, 3, 4, 8, 5} by level) for light saves or the thumbnail.
 - The inventory and ammo never carry over to the next level (0x4325b0 clears them).
-- **In the port** (`GameState`): light saves as JSON in `user://saves/<NAME>.sav`, `LASTGAME` on
-  death with "Continue" in the menu, and the "Saved Game" list. The F2 snapshot and the save prompt
-  after a level aren't done yet.
+- **The prompt** (0x42b520(1), each frame 0x42b75c, on a cleared screen ❓): `SV_ASK` at row −1,
+  `ABORT2` "Yes" and `ABORT3` "No" at rows 0 and 1 (baseline `175 + 36 × row`, centred, in
+  `FONTBIG`; up/down or the mouse select, rows `(y − 149) / 36`); unselected lines are drawn at 65 %
+  and the selected one grows to full size in 5 ticks (0x42c374: `0.65 + ticks × 0.35 × 0.2`).
+  "Yes" asks the name: `SV_TITLE` centred at y 31, the name below it one character per 28 pixels
+  from x 202 (baseline 200), the cursor `_` blinking every 8 frames; typed letters and digits (and
+  `_`, `$`, table 0x4955c8) replace the one at the cursor, up to 8; Backspace, Delete, Home, End,
+  Left and Right edit; Enter saves (at least one character), Esc gives up. The name offered is the
+  new level index + 1 (`"%d"`, 0x4955a4). After the Gunter stream it's the same with type 3 (the
+  last level, named "6").
+- **In the port** (`GameState`, `SavePrompt`): light saves as JSON in `user://saves/<NAME>.sav`,
+  `LASTGAME` on death with "Continue" in the menu, the "Saved Game" list, and the prompt after the
+  Score-O-matic and after the Gunter stream (drawn on black). A type 6 save shows the briefing and
+  the fall first. The F2 snapshot isn't done.
 
 ## The minecrawler's timer (0x4240c4)
 
