@@ -17,6 +17,7 @@ Legend used in the documents: ✅ fully understood and implemented, 🟡 partly 
 | [scripts.md](scripts.md) | The script language and its virtual machine: which scripts run, the interpreter loop, restart points, gosub stack, operand encodings, bugs in the data |
 | [script_opcodes.md](script_opcodes.md) | Reference of the 251 opcodes (generated from [`script_opcodes.json`](../tools/python/script_opcodes.json)) |
 | [scripts/notes_part1.md](scripts/notes_part1.md), [part 2](scripts/notes_part2.md), [part 3](scripts/notes_part3.md) | Raw reverse engineering notes on the interpreter: object fields, arena fields, helpers, globals, per-opcode details |
+| [sound.md](sound.md) | The sound system: samples and voices, the mixer (volume in dB, distance law, Doppler, scope listening), the arena music and its fades, every sound the code plays |
 | [roadmap.md](roadmap.md) | What the port does and what's next |
 
 ## Tools

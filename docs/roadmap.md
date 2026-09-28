@@ -41,6 +41,8 @@
 - The stream after each level (`STREAM`): the generated tube, Kurt's steering and the walls, the
   lights, the `SWH150` bonus, Bones' rescue, Gunter and the planet after LEVEL8, the fades.
 - The save prompt after a level ("Save Game?", the name typed in the original fonts).
+- The original's sound mixer (volume in dB, distance law, Doppler, the scope listening, loops and
+  volumes from the SNI files) and its music fades, `CORRIDOR` in corridors.
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
@@ -55,7 +57,8 @@
 1. **Aliens and scripts**: sparks and explosions' debris, the full-screen strike of Bones, the
    second arena seen through open doors.
 2. **Sniper mode**: the 3D clip on the screen and the air strike's iris.
-3. **Sound**: SNI sounds, arena sounds, music, footsteps.
+3. **Sound**: the sounds of mechanics not done yet (pickups running away, the snowboard, the
+   `XE` ride), the sound options' `OPTSONG`.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.
 5. **Level flow**: F2 snapshots (a full save of the level's state).

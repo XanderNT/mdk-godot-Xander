@@ -157,6 +157,7 @@ func _activate(obj: MDKObject) -> void:
 			obj.velocity = Vector3(direction.x, direction.y, 0.0)
 			obj.flags |= MDKObject.FLAG_GRAVITY | MDKObject.FLAG_COLLIDES
 			obj.restart_animation(get_animation("SW_DUM_M"), true)
+			obj.loop_sound = runtime.mixer.play_on("DUMMY", obj)
 			decoy = obj
 		KurtInventory.Item.INTERESTING_BOMB:
 			# It spins on its first frame for 20 seconds (or until Kurt sets it off), then plays its
@@ -165,13 +166,12 @@ func _activate(obj: MDKObject) -> void:
 			obj.animation_end_frame = 0
 			obj.item_ticks = 600
 			bomb = obj
-			runtime.play_sound_at("WMIB", obj.mdk_position)
 		KurtInventory.Item.TORNADO:
 			# The tornado spins for 2 seconds, letting out a twister every half second.
 			add_twister(MDKTwister.new(runtime, obj.arena, obj.mdk_position, 0.0))
 			obj.item_ticks = 60
 			obj.parameter = 45
-			runtime.play_sound_at("TORNADO", obj.mdk_position)
+			runtime.mixer.play("TORNADO", SoundMixer.Start.ONCE)
 		KurtInventory.Item.MORTAR:
 			obj.restart_animation(get_animation("SW_THUMP"), false)
 			obj.item_ticks = 30
@@ -187,7 +187,8 @@ func _activate(obj: MDKObject) -> void:
 			obj.restart_animation(get_animation("SW_NUKE"), false)
 			obj.animation_time = 1.0
 			runtime.kurt.white_flash = maxf(runtime.kurt.white_flash, 255.0)
-			runtime.set_loop_sound(obj, "NUKE")
+			# A loop without position, until the nuke goes.
+			obj.loop_sound = runtime.mixer.play("NUKE", SoundMixer.Start.NEW, obj)
 
 
 ## Active items (0x43e860 decoy, 0x43f18c bomb, 0x43e690 mortar, 0x43efcc nuke, 0x43e980 seal,

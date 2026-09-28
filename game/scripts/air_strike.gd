@@ -50,11 +50,11 @@ func call_strike(eye: Vector3, yaw: float, pitch: float) -> bool:
 	var direction := Vector3(cos(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), sin(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), -sin(deg_to_rad(pitch)))
 	var hit := runtime.raycast(eye, eye + direction * RANGE)
 	if hit.is_empty() or used_up:
-		runtime.kurt.play_sound("RASPBER")
+		runtime.kurt.play_sound("RASPBER", SoundMixer.Start.RESTART)
 		return false
 	var target := MDKScriptRuntime.to_mdk(hit.position)
 	if not runtime.raycast(target + Vector3(0, 0, 1), target + Vector3(0, 0, SKY)).is_empty():
-		runtime.kurt.play_sound("RASPBER")
+		runtime.kurt.play_sound("RASPBER", SoundMixer.Start.RESTART)
 		return false
 	var dive := GameState.index_of(runtime.level.number) > 3
 	if dive:
@@ -149,3 +149,4 @@ func _drop_tooth() -> void:
 	tooth.item_ticks = TOOTH_TICKS
 	tooth.friction = 0.0
 	tooth.velocity = Vector3(0, 0, -5.0)
+	tooth.loop_sound = runtime.mixer.play_on("DROP", tooth)

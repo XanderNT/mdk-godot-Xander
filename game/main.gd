@@ -70,6 +70,12 @@ func _ready() -> void:
 		var animation := level.get_sprite_animation(animation_name)
 		if animation:
 			sprites.add_animation(animation_name, animation)
+	var mixer := SoundMixer.new()
+	mixer.name = "SoundMixer"
+	mixer.get_sound = level.get_sound
+	add_child(mixer)
+	kurt.mixer = mixer
+	scripts.mixer = mixer
 	kurt.setup(sprites, level.get_palette(), level.get_sound)
 	# Kurt keeps the health and the pickups of the fall.
 	if not GameState.carry.is_empty():
@@ -223,6 +229,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	# In sniper mode the sounds are heard through the scope.
+	$SoundMixer.scope_zoom = kurt.zoom if kurt.sniping else 0.0
 	info.text = "Level %d  %s  Kurt: %s  %s  objects: %d  FPS: %d" % [level.number, scripts.current_arena,
 			MDKScriptRuntime.to_mdk(kurt.global_position).round(), Kurt.State.keys()[kurt.state],
 			scripts.objects.size(), Engine.get_frames_per_second()]

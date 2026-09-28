@@ -1,14 +1,17 @@
 ## An SNI archive (`TRAVERSE.SNI`, `LEVELnS.SNI`, `LEVELnO.SNI`).
 ##
-## Layout: common header, `u32 count`, then per entry `char[12] name, u16 flags, u16 ?, u32 offset,
-## u32 length` (offset relative to file offset 4). Most entries are RIFF WAV sounds (flags 3: music);
+## Layout: common header, `u32 count`, then per entry `char[12] name, u16 flags, u16 volume,
+## u32 offset, u32 length` (offset relative to file offset 4). Flag 1 loops the sound, flag 2 marks
+## music; the volume is the sound's default (0–0x7FFF). Most entries are RIFF WAV sounds;
 ## in `LEVELnO.SNI`, the corridor entries (`CHMO_n`, `CMEAT_n`, …) hold the corridors' world geometry
 ## instead (same layout as an arena's world section).
 class_name MDKSni
 extends RefCounted
 
+const FLAG_LOOP := 1
+
 var bytes := PackedByteArray()
-## Entry name to `[offset, length, flags]`.
+## Entry name to `[offset, length, flags, volume]`.
 var entries := {}
 
 var _sounds := {}
@@ -26,9 +29,9 @@ static func load_file(path: String) -> MDKSni:
 	for i in count:
 		var entry_name := r.name(12)
 		var flags := r.u16()
-		r.skip(2)
+		var volume := r.u16()
 		var offset := 4 + r.u32()
-		sni.entries[entry_name] = [offset, r.u32(), flags]
+		sni.entries[entry_name] = [offset, r.u32(), flags, volume]
 	return sni
 
 
@@ -37,14 +40,19 @@ func is_sound(entry_name: String) -> bool:
 	return bytes.slice(offset, offset + 4).get_string_from_ascii() == "RIFF"
 
 
-## Returns a sound (AudioStreamWAV), or `null` if the entry isn't a sound.
+## Returns a sound (AudioStreamWAV, looping when its flag 1 is set, its default volume in the
+## `volume` meta), or `null` if the entry isn't a sound.
 func get_sound(entry_name: String) -> AudioStreamWAV:
-	if not _sounds.has(entry_name):
-		if not entries.has(entry_name) or not is_sound(entry_name):
-			return null
-		var entry: Array = entries[entry_name]
-		_sounds[entry_name] = MDKSound.load_wav(bytes.slice(entry[0], entry[0] + entry[1]))
-	return _sounds[entry_name]
+	if _sounds.has(entry_name):
+		return _sounds[entry_name]
+	if not entries.has(entry_name) or not is_sound(entry_name):
+		return null
+
+	var entry: Array = entries[entry_name]
+	var sound := MDKSound.load_wav(bytes.slice(entry[0], entry[0] + entry[1]), entry[2] & FLAG_LOOP != 0)
+	sound.set_meta(&"volume", entry[3])
+	_sounds[entry_name] = sound
+	return sound
 
 
 ## Returns a sprite animation of the archive (Kurt's extra frames in `LEVELnS.SNI`), or `null`.

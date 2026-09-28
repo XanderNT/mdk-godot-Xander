@@ -227,9 +227,10 @@ for how the hotspot is used.
 
 ## SNI (sound archive) ✅
 
-Common header, `u32 count`, then per entry `char[12] name, u16 flags, u16 ?, u32 offset, u32 length`
+Common header, `u32 count`, then per entry `char[12] name, u16 flags, u16 volume, u32 offset, u32 length`
 (offset relative to file offset 4). Most entries are RIFF WAV files (PCM, mono, 8 or 16 bits);
-flags 3 marks music (the arena music of `LEVELnO.SNI`, `CORRIDOR`), 1 some looping sounds ❓.
+flags 3 marks music (the arena music of `LEVELnO.SNI`, `CORRIDOR`), 1 looping sounds; the u16
+after the flags is the sound's default volume (0–0x7FFF, see [sound.md](sound.md)).
 Some headers are sloppy (`GATTFIRE` doesn't count its final pad byte, some `LIST` chunks are
 truncated), so the port only keeps the `fmt ` and `data` chunks.
 

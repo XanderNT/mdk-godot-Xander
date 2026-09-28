@@ -39,6 +39,8 @@ const FALL_START_SPEED := -16.0
 const CHUTE_GRAVITY := 21.33
 const CHUTE_FALL_SPEED := -8.0
 const CHUTE_BRAKE := 256.0
+## `CHUTEON` starts once the chute's opening frames have played.
+const CHUTE_OPEN_FRAMES := 4
 ## Out of an updraft Kurt rises at most this fast.
 const UPDRAFT_EXIT_SPEED := 40.0
 
@@ -236,6 +238,7 @@ var _slide_air := 0.0
 var sprites: MDKBni
 ## Returns a sound by name (see `Level.get_sound()`).
 var get_sound: Callable
+var mixer: SoundMixer
 
 var _mouse_turn := 0.0
 ## Ticks since Kurt grabbed a ledge (`0x573a78`).
@@ -245,9 +248,8 @@ var _climb_ticks := 0
 var _inside_bodies: Array[RID] = []
 var _jump_ticks_left := 0
 var _jump_released := true
-## The original alternates two pairs of footstep sounds (`damp_animate`).
-var _footstep_pair := false
-var _sound_players: Array[AudioStreamPlayer] = []
+## The original alternates two pairs of footstep sounds (`damp_animate`), `FOOT3`/`FOOT4` first.
+var _footstep_pair := true
 var _gun_player: AudioStreamPlayer
 ## `FAN` loops while Kurt is in an updraft; `BUTSLIDE`/`BUTBRAKE` while he slides.
 var _fan_player: AudioStreamPlayer
@@ -269,10 +271,6 @@ func _ready() -> void:
 func setup(p_sprites: MDKBni, palette: MDKPalette, p_get_sound: Callable) -> void:
 	sprites = p_sprites
 	get_sound = p_get_sound
-	for i in 4:
-		var player := AudioStreamPlayer.new()
-		add_child(player)
-		_sound_players.push_back(player)
 	_gun_player = AudioStreamPlayer.new()
 	add_child(_gun_player)
 	_fan_player = AudioStreamPlayer.new()
@@ -359,6 +357,7 @@ func _physics_process(delta: float) -> void:
 	hurt_flash = maxf(hurt_flash - 4.0 * TICKS * delta, 0.0)
 	white_flash = maxf(white_flash - 4.0 * TICKS * delta, 0.0)
 	_update_knock_damage(delta)
+	_update_chute_sound()
 	var turbo := Input.is_action_pressed(&"turbo")
 	var on_floor := is_on_floor()
 	if Input.is_action_just_pressed(&"sniper_mode"):
@@ -472,6 +471,7 @@ func _hang_from(top: Vector3, step: Vector3) -> bool:
 	firing = false
 	_gun_player.stop()
 	muzzle.visible = false
+	mixer.stop("CHUTEON")
 	chute_open = false
 	_climb_ticks = 0
 	_set_state(State.HANG)
@@ -555,6 +555,8 @@ func _enter_sniper(on_floor: bool) -> void:
 	play_sound("SNIPERON")
 	_breath_player.stream = _looped(get_sound.call("BREATH"))
 	if _breath_player.stream:
+		# Quieter than the others: its SNI volume is 0x5000.
+		_breath_player.volume_db = SoundMixer.to_db(_breath_player.stream.get_meta(&"volume", SoundMixer.FULL_VOLUME))
 		_breath_player.play()
 
 
@@ -873,8 +875,8 @@ func _update_firing() -> void:
 	firing = fire
 	_gun_super = super_gun
 	if firing:
-		# `GATTFIRE` loops while firing (`MULTIFIRE` with the super chain gun, 0x46c3e4).
-		var stream := _looped(get_sound.call("MULTIFIRE" if super_gun else "GATTFIRE"))
+		# `MULTIFIRE` loops while firing (`GATTFIRE` with the super chain gun, 0x46c3e4).
+		var stream := _looped(get_sound.call("GATTFIRE" if super_gun else "MULTIFIRE"))
 		if stream:
 			_gun_player.stream = stream
 			_gun_player.play()
@@ -1014,8 +1016,6 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 		elif velocity.y < FALL_START_SPEED and (state not in [State.JUMP, State.RUN_JUMP] or animation_done):
 			_set_state(State.FALL)
 	elif state in [State.JUMP, State.RUN_JUMP, State.FALL, State.CHUTE]:
-		if state == State.CHUTE:
-			play_sound("CHUTEIN")
 		play_sound("LAND")
 		_set_state(State.LAND)
 	elif state == State.LAND and not animation_done and is_zero_approx(forward_input) and is_zero_approx(strafe_input):
@@ -1075,15 +1075,20 @@ static func _looped(stream: AudioStreamWAV) -> AudioStreamWAV:
 
 
 ## Plays a sound (by name, from the level's sounds) without position.
-func play_sound(sound_name: String) -> void:
-	var stream: AudioStream = get_sound.call(sound_name)
-	if not stream:
+func play_sound(sound_name: String, start := SoundMixer.Start.NEW) -> void:
+	mixer.play(sound_name, start)
+
+
+## `CHUTEON` flaps while the chute is open (after its opening frames); when the chute closes it
+## stops, with `CHUTEIN` (`damp_animate`).
+func _update_chute_sound() -> void:
+	if chute_open and state == State.CHUTE and animation_frame >= CHUTE_OPEN_FRAMES:
+		mixer.play("CHUTEON", SoundMixer.Start.ONCE)
 		return
-	for player in _sound_players:
-		if not player.playing:
-			player.stream = stream
-			player.play()
-			return
+	if chute_open or not mixer.is_playing("CHUTEON"):
+		return
+	mixer.stop("CHUTEON")
+	play_sound("CHUTEIN")
 
 
 func _set_state(new_state: State) -> void:

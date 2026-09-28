@@ -220,7 +220,8 @@ var connects := ""
 ## Sound tracked by `if_own_sound` (played by `play_sound` with flag 4) and the looping sound
 ## (`set_loop_sound`).
 var tracked_sound := ""
-var loop_sound: AudioStreamPlayer3D
+var tracked_voice: SoundMixer.Voice
+var loop_sound: SoundMixer.Voice
 ## Strings set by opcodes 25 and 26 (`obj+0x154`, `obj+0x150`; their use isn't known).
 var labels := ["", ""]
 ## Hold frame (`obj+0x118`): the animation stops there; `ANIMATION_ENDED` once a non looping

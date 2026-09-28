@@ -50,6 +50,7 @@ class ArenaState:
 
 var level: Level
 var kurt: Kurt
+var mixer: SoundMixer
 var vm: MDKScriptVM
 var motion: MDKObjectMotion
 ## Sprite effects (wounds, drops, bubbles) and shattered triangle groups.
@@ -667,8 +668,8 @@ func _end_level() -> void:
 	level_over = true
 	GameState.town_flags = global_flags
 	kurt.stop_firing()
-	play_sound_at("NUKE", kurt_position)
-	play_sound_at("TORNADO", kurt_position)
+	mixer.play("NUKE")
+	mixer.play("TORNADO")
 	end_level = MDKEndLevel.new()
 	add_child(end_level)
 	end_level.finished.connect(level_ended.emit.bind(false))
@@ -1073,20 +1074,12 @@ func spark(point: Vector3, _count: int, sound_name := "") -> void:
 ## Starts the object's looping sound (`set_loop_sound`), stopping the previous one; an empty name
 ## just stops it.
 func set_loop_sound(obj: MDKObject, sound_name: String) -> void:
-	if obj.loop_sound:
-		obj.loop_sound.queue_free()
-		obj.loop_sound = null
-	var stream := level.get_sound(sound_name) if not sound_name.is_empty() else null
-	if not stream:
+	mixer.stop_voice(obj.loop_sound)
+	obj.loop_sound = null
+	if sound_name.is_empty():
 		return
-	stream = stream.duplicate()
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_end = stream.data.size() / ((2 if stream.stereo else 1) * (2 if stream.format == AudioStreamWAV.FORMAT_16_BITS else 1))
-	obj.loop_sound = AudioStreamPlayer3D.new()
-	obj.loop_sound.stream = stream
-	obj.loop_sound.unit_size = 50.0
-	obj.add_child(obj.loop_sound)
-	obj.loop_sound.play()
+	# It only loops if the sound itself does (its SNI flag).
+	obj.loop_sound = mixer.play_on(sound_name, obj)
 
 
 ## Looks for cover (`find_cover_spot`): a DTI record of type 5 of the object's arena, 9–400 units
@@ -1229,18 +1222,7 @@ func find_cover_spot(obj: MDKObject) -> void:
 
 ## Plays a sound at a point (MDK coordinates), independently of any object.
 func play_sound_at(sound_name: String, point: Vector3) -> void:
-	var stream := level.get_sound(sound_name)
-	if not stream:
-		return
-	var player := AudioStreamPlayer3D.new()
-	player.stream = stream
-	player.unit_size = 50.0
-	player.position = MDKMeshBuilder.to_godot(point)
-	player.finished.connect(player.queue_free)
-	player.add_to_group(&"mdk_sounds")
-	player.set_meta(&"sound", sound_name.to_upper())
-	add_child(player)
-	player.play()
+	mixer.play_at(sound_name, point)
 
 
 ## Kurt takes the pickups he runs through (`damp_collect_pickups` 0x46c448): the segment he moved
@@ -1257,7 +1239,7 @@ func collect_pickups() -> void:
 		var sound := kurt.inventory.collect(obj.type_name, kurt)
 		if sound.is_empty():
 			continue
-		play_sound_at(sound, kurt_position)
+		mixer.play(sound, SoundMixer.Start.RESTART)
 		obj.flags |= MDKObject.FLAG_COLLECTED | 0x1000
 		obj.parameter_timer = 30.0
 		obj.velocity = Vector3.ZERO
@@ -1576,36 +1558,33 @@ func can_see_kurt(obj: MDKObject, range: float, cone: float) -> bool:
 	return raycast(obj.mdk_position + Vector3(0, 0, 5), kurt_position + Vector3(0, 0, 4)).is_empty()
 
 
-## `play_sound`: plays a sound at the object (3D) or without position (flag 0x80). `flags & 3`:
-## 0 play, 1 restart, 2 play unless it's already playing, 3 stop.
-func play_sound(obj: MDKObject, sound_name: String, flags: int, _position: Variant) -> void:
+## `play_sound` (0x442402): `flags & 3` 0 play, 1 restart, 2 play unless it's already playing,
+## 3 stop (3D) or nothing (2D). Flag 0x80: without position; 0x10: following the object at an
+## offset; 0x20: at a reference point; 0x40: at a point; none: where the object is (following it
+## with flag 4, which also makes it the object's tracked sound).
+func play_sound(obj: MDKObject, sound_name: String, flags: int, position: Variant) -> void:
+	const STARTS := [SoundMixer.Start.NEW, SoundMixer.Start.RESTART, SoundMixer.Start.ONCE]
 	var mode := flags & 3
-	if flags & 4:
-		obj.tracked_sound = sound_name
-	var existing := obj.get_node_or_null(NodePath("Sound_" + sound_name))
-	if existing:
-		if mode == 2 and existing.playing:
-			return
-		if mode == 3 or mode == 1:
-			existing.stop()
-			if mode == 3:
-				return
-		existing.play()
+	if flags & 0x80:
+		if mode != 3:
+			mixer.play(sound_name, STARTS[mode])
 		return
 	if mode == 3:
+		mixer.stop(sound_name)
 		return
-	var stream := level.get_sound(sound_name)
-	if not stream:
-		return
-	var player: Node
-	if flags & 0x80:
-		player = AudioStreamPlayer.new()
+
+	var point := Vector3(position[0], position[1], position[2]) if position is Array else Vector3.ZERO
+	var voice: SoundMixer.Voice
+	if flags & 0x10:
+		voice = mixer.play_on(sound_name, obj, STARTS[mode], point)
+	elif flags & 0x20:
+		voice = mixer.play_at(sound_name, obj.get_reference_point(position), STARTS[mode])
+	elif flags & 0x40:
+		voice = mixer.play_at(sound_name, point, STARTS[mode])
+	elif flags & 4:
+		voice = mixer.play_on(sound_name, obj, STARTS[mode])
 	else:
-		player = AudioStreamPlayer3D.new()
-		player.unit_size = 50.0
-	player.name = "Sound_" + sound_name
-	player.stream = stream
-	player.add_to_group(&"mdk_sounds")
-	player.set_meta(&"sound", sound_name.to_upper())
-	obj.add_child(player)
-	player.play()
+		voice = mixer.play_at(sound_name, obj.mdk_position, STARTS[mode])
+	if flags & 4:
+		obj.tracked_sound = sound_name
+		obj.tracked_voice = voice

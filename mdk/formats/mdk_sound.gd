@@ -5,11 +5,16 @@ extends RefCounted
 
 ## Loads a WAV sound. `loop` makes it loop forever (for music).
 static func load_wav(wav: PackedByteArray, loop := false) -> AudioStreamWAV:
-	return AudioStreamWAV.load_from_buffer(_clean_wav(wav), {
+	var sound := AudioStreamWAV.load_from_buffer(_clean_wav(wav), {
 		"compress/mode": 0,
 		# 1: disabled, 2: forward.
 		"edit/loop_mode": 2 if loop else 1,
 	})
+	# The whole sound loops.
+	if loop and sound.loop_end == 0:
+		var frame_bytes := (2 if sound.stereo else 1) * (2 if sound.format == AudioStreamWAV.FORMAT_16_BITS else 1)
+		sound.loop_end = sound.data.size() / frame_bytes
+	return sound
 
 
 ## Rebuilds a WAV file with only its `fmt ` and `data` chunks. Some of MDK's files have headers that

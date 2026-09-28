@@ -830,8 +830,7 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 		107:  # set_loop_sound
 			runtime.set_loop_sound(obj, o[0])
 		249:  # if_own_sound: mode 0 playing, 1 playing this sound, other: not playing
-			var player := obj.get_node_or_null(NodePath("Sound_" + obj.tracked_sound)) as AudioStreamPlayer3D if not obj.tracked_sound.is_empty() else null
-			var playing := player != null and player.playing
+			var playing := obj.tracked_voice != null and obj.tracked_voice.is_playing()
 			var condition := playing
 			if o[0] == 1:
 				condition = playing and obj.tracked_sound.to_upper() == String(o[2]).to_upper()

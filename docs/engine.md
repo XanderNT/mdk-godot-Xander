@@ -321,8 +321,8 @@ otherwise it explodes (0x43d224):
 
 ## Kurt's chain gun (0x41a304)
 
-Holding fire (`damp_move`) sets `0x573a38`: the chain gun sound loops (`GATTFIRE`, or `MULTIFIRE`
-with the super chain gun) and Kurt's animation becomes `K_SHOT` (standing) or `K_RUNFIR`
+Holding fire (`damp_move`) sets `0x573a38`: the chain gun sound loops (`MULTIFIRE`, or `GATTFIRE`
+with the super chain gun, 0x46c3e4) and Kurt's animation becomes `K_SHOT` (standing) or `K_RUNFIR`
 (running); in the other states a random frame of `K_MUZZF` is drawn behind Kurt every other tick
 ([gameplay.md](gameplay.md#firing)). Every frame, after Kurt moves and before the objects run, the
 chain gun **hits instantly** (no bullets):

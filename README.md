@@ -1,7 +1,7 @@
 # MDK in Godot
 
 ![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Progress: about 75%](https://img.shields.io/badge/progress-~75%25-yellow)
+![Progress: about 78%](https://img.shields.io/badge/progress-~78%25-yellow)
 ![Godot 4.7](https://img.shields.io/badge/Godot-4.7-478cbf?logo=godotengine&logoColor=white)
 
 A port of [MDK](https://en.wikipedia.org/wiki/MDK_(video_game)) (Shiny Entertainment, 1997) to
@@ -27,11 +27,11 @@ there's no release. See [the roadmap](docs/roadmap.md).
 | Script VM, aliens, doors, bosses, cutscenes | █████████░ 90% |
 | Chain gun, items, sniper mode, air strike | █████████░ 90% |
 | HUD, menus, options, key bindings | ████████░░ 80% |
-| Sound and music | ██████░░░░ 60% |
+| Sound and music | █████████░ 85% |
 | Level flow: briefing, statistics, saves | ████████░░ 80% |
 | The fall (`FALL3D`) and the stream between levels | █████████░ 90% |
 | End videos, enhanced graphics mode | ░░░░░░░░░░ 0% |
-| **Overall** | **about 75%** |
+| **Overall** | **about 78%** |
 
 ## Screenshots
 
