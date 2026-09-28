@@ -240,7 +240,8 @@ func _next_phase() -> void:
 		GameState.level = GameState.ORDER[_index]
 	if _phases.is_empty():
 		briefing_only = false
-		get_tree().change_scene_to_file("res://game/main.tscn")
+		# The fall comes after every briefing (LEVEL5 has none).
+		get_tree().change_scene_to_file("res://game/fall/fall.tscn")
 		return
 	_start_phase(_phases.pop_front())
 

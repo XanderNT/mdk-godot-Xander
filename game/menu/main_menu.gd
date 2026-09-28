@@ -3,7 +3,7 @@
 ## Game command line options (`--level`, `--viewer`, `--screenshot`, …) skip the menu,
 ## unless `--menu` is given; `--options` and `--controls` open those screens; `--stats=N` shows the
 ## screens after LEVELn (`--phase=1…4` starts at a page, `--counts=shots,hits,sniper,sniper hits,
-## kills,enemies,heads`, `--towns=bits`) and `--briefing=N` its briefing.
+## kills,enemies,heads`, `--towns=bits`), `--briefing=N` its briefing and `--fall=N` the fall before it.
 extends Control
 
 
@@ -23,6 +23,11 @@ func _ready() -> void:
 		GameState.level = int(args.get("stats", args.get("briefing", "7")))
 		StatsScreen.briefing_only = args.has("briefing")
 		get_tree().change_scene_to_file.call_deferred("res://game/menu/stats_screen.tscn")
+		return
+	if args.has("fall"):
+		# Test: the fall before LEVELn (`--fall=N`).
+		GameState.level = int(args.fall)
+		get_tree().change_scene_to_file.call_deferred("res://game/fall/fall.tscn")
 		return
 	if args.has("level") or args.has("viewer") or args.has("models") or (args.has("screenshot") and not args.has("menu")):
 		get_tree().change_scene_to_file.call_deferred("res://game/main.tscn")
@@ -103,7 +108,7 @@ func _on_new_game() -> void:
 	GameState.level = GameState.ORDER[level_index]
 	GameState.deaths = 0
 	GameState.strike_used = false
-	# The briefing, then the level.
+	# The briefing, the fall, then the level.
 	StatsScreen.briefing_only = true
 	get_tree().change_scene_to_file("res://game/menu/stats_screen.tscn")
 

@@ -27,13 +27,14 @@ var reference_points := PackedVector3Array()
 var bounds := AABB()
 
 
-## `has_flags` false: the model has no leading flags word and a single unnamed part (`XGHEAD` of
-## `STATS.BNI`, the fall's models).
-static func parse(p_name: String, bytes: PackedByteArray, offset: int, has_flags := true) -> MDKModel:
+## `has_flags` false: the model has no leading flags word (`XGHEAD` of `STATS.BNI`, the fall's
+## models); `named_parts` then tells whether it has named parts (the fall's table 0x490ca4) or a
+## single unnamed one.
+static func parse(p_name: String, bytes: PackedByteArray, offset: int, has_flags := true, p_named_parts := false) -> MDKModel:
 	var model := MDKModel.new()
 	model.name = p_name
 	var r := BinReader.new(bytes, offset)
-	var named_parts := r.u32() != 0 if has_flags else false
+	var named_parts := r.u32() != 0 if has_flags else p_named_parts
 	var material_count := r.u32()
 	for i in material_count:
 		# The game keeps the first 10 characters.

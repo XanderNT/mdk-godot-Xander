@@ -71,6 +71,11 @@ func _ready() -> void:
 		if animation:
 			sprites.add_animation(animation_name, animation)
 	kurt.setup(sprites, level.get_palette(), level.get_sound)
+	# Kurt keeps the health and the pickups of the fall.
+	if not GameState.carry.is_empty():
+		kurt.health = GameState.carry.health
+		kurt.inventory = GameState.carry.inventory
+		GameState.carry = {}
 	hud.setup(kurt, sprites, level.get_palette(), MDKFti.load_file(MDKData.path("MISC/MDKFONT.FTI")))
 	var pause := PauseMenu.new()
 	pause.name = "PauseMenu"

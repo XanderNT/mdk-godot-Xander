@@ -313,8 +313,8 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
   [below](#statistics-and-briefing-state-6).
 - **In the port**: the order of play, the loading screen (`LoadingScreen`), the end of level
   (`MDKEndLevel`), the statistics, debriefing and briefing (`StatsScreen`: after a level below
-  index 4, and the briefing alone for a new game), then the next level. The fall, the stream and the
-  save prompt after the Score-O-matic aren't done. The Score-O-matic's counts
+  index 4, and the briefing alone for a new game), the fall after every briefing (`MDKFall`), then
+  the next level. The stream and the save prompt after the Score-O-matic aren't done. The Score-O-matic's counts
   (`GameState.stats`) are cleared when a level starts.
 
 ### Statistics and briefing (state 6)
@@ -463,6 +463,17 @@ level index + 1 (1–5). Times are in seconds (`t`, `0x5209c4`, counted from the
 ticks (1/30 s); `dt` is the frame time in seconds (`0x491e24`). World units "u", Z up. The files are
 described in [formats.md](formats.md#fall-files-fall3d); `tools/python/fall3d_dump.py` lists and
 exports them.
+
+**In the port** (`game/fall/fall.gd`, `MDKFall`): all of the above. The ground, the track and the
+haze are drawn by a shader (`fall_ground.gdshader`) with the formulas below; the models in a
+`SubViewport` with the same projection (a camera looking down, vertical FOV 71.5°, wider windows
+see more on the sides); the palette effects (whitening, darkening, the red of death) by a
+full-screen shader on the final image (`fall_screen.gdshader`) instead of the palette. Steering
+uses the Forward/Back and Turn or Strafe left/right actions; Esc skips the fall (not in the
+original). The health and the inventory go on to the level (`GameState.carry`). Approximations:
+the radar's colours (translucent green), the smoke trails (a band along the last 32 points instead
+of the original tube, 0x439454), the explosion drawn at Kurt's depth rather than always on top.
+Test: `--fall=N` (N = the LEVELn number) with `--wait`, `--screenshot` and `--god`.
 
 ### Loading (0x410018) ✅
 

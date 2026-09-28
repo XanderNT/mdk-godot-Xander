@@ -26,6 +26,8 @@ var strike_used := false
 ## enemies created (`0x573c50`) and killed by Kurt (`0x573c54`). The port clears them when a level
 ## starts (the original's reset wasn't found ❓).
 var stats := {}
+## What the fall hands on to the level (`MDKFall`): `health` and `inventory` (a `KurtInventory`).
+var carry := {}
 ## The town flags at the end of the level (`0x57440f`), for the debriefing.
 var town_flags := 0
 ## The object types that count as enemies (`0x491c38`).
