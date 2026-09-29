@@ -129,6 +129,9 @@ var current_arena := ""
 ## when active (`0x573a6c`) its objects and script run too. See docs/engine.md, "The second arena".
 var second_arena := ""
 var second_active := false
+## The arenas loaded (Kurt's and the second) and drawn (Kurt's and the active second) last tick.
+var _loaded_arenas: Array[String] = []
+var _drawn_arenas: Array[String] = []
 var objects: Array[MDKObject] = []
 
 var _arenas := {}
@@ -282,6 +285,32 @@ func preload_arena(arena_name: String) -> void:
 	second_active = false
 
 
+## Only Kurt's arena and the active second one are drawn, with their objects (0x41e344). An
+## arena in neither slot any more is put away (0x419cb0: its objects' loop sounds stop), and
+## started again when it comes back (`arena_activate`, 0x43f8e0).
+func _update_arenas() -> void:
+	var loaded: Array[String] = [current_arena]
+	if not second_arena.is_empty():
+		loaded.push_back(second_arena)
+	var drawn: Array[String] = [current_arena]
+	if second_active and not second_arena.is_empty():
+		drawn.push_back(second_arena)
+
+	if loaded != _loaded_arenas:
+		for obj in objects:
+			if obj.arena in _loaded_arenas and obj.arena not in loaded:
+				mixer.stop_voice(obj.loop_sound)
+				obj.loop_sound = null
+			elif obj.arena in loaded and obj.arena not in _loaded_arenas and not obj.loop_sound_name.is_empty():
+				obj.loop_sound = mixer.play_on(obj.loop_sound_name, obj)
+		_loaded_arenas = loaded
+	if drawn != _drawn_arenas:
+		level.show_arenas(drawn)
+		_drawn_arenas = drawn
+	for obj in objects:
+		obj.visible = obj.arena in drawn
+
+
 ## Whether an arena's objects run: Kurt's, and the second one when it's active.
 func is_live_arena(arena_name: String) -> bool:
 	return arena_name == current_arena or (second_active and arena_name == second_arena)
@@ -369,6 +398,7 @@ func _tick() -> void:
 		current_arena = arena_name
 		show_arena(arena_name)
 	_check_triggers()
+	_update_arenas()
 	# Kurt moves and takes pickups, then fires, then the objects run (`game_frame`).
 	if _tick_count > 0:
 		collect_pickups()
@@ -1214,6 +1244,7 @@ func spark(point: Vector3, count: int, sound_name := "", kind := Spark.FLESH) ->
 func set_loop_sound(obj: MDKObject, sound_name: String) -> void:
 	mixer.stop_voice(obj.loop_sound)
 	obj.loop_sound = null
+	obj.loop_sound_name = sound_name
 	if sound_name.is_empty():
 		return
 	# It only loops if the sound itself does (its SNI flag).

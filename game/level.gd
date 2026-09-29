@@ -250,6 +250,13 @@ func enter_arena(arena_name: String) -> void:
 		root.process_mode = Node.PROCESS_MODE_INHERIT
 
 
+## Draws only these arenas (Kurt's and the second, see `MDKScriptRuntime`); the others stay solid.
+func show_arenas(arena_names: Array[String]) -> void:
+	for arena_name: String in arena_bounds:
+		if has_node(arena_name):
+			(get_node(arena_name) as Node3D).visible = arena_name in arena_names
+
+
 ## The DTI records of an arena (see `MDKDti`).
 func get_arena_records(arena_name: String) -> Array:
 	for entry in dti.arenas:

@@ -222,6 +222,8 @@ var connects := ""
 var tracked_sound := ""
 var tracked_voice: SoundMixer.Voice
 var loop_sound: SoundMixer.Voice
+## The looping sound's name, to start it again when the arena comes back (0x43f8e0).
+var loop_sound_name := ""
 ## Strings set by opcodes 25 and 26 (`obj+0x154`, `obj+0x150`; their use isn't known).
 var labels := ["", ""]
 ## Hold frame (`obj+0x118`): the animation stops there; `ANIMATION_ENDED` once a non looping

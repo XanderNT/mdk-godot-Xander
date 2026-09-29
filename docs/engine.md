@@ -254,7 +254,8 @@ of a transition are drawn and solid. Arenas that no connection leads to and that
 arena can only be reached by a teleport; some are never used, and level 7's `DANT_8` (flat colours
 and `GLASS3`) lies over the start of `DANT_1`. The port keeps every arena loaded, but hides these
 and makes them not solid until a teleport takes Kurt there, and picks Kurt's arena from the
-smallest arena bounds that contain him.
+smallest arena bounds that contain him; it draws only Kurt's arena and the second one (see
+[The second arena](#the-second-arena)).
 
 ### The second arena
 
@@ -378,9 +379,12 @@ deactivation (end of frame).
 doors starting to open, crossing into another arena, trigger records of type 1, the start and
 teleports) and `preload_arena()` (opcode 223, type 3); a door that ends closing clears it. The
 objects and the script of the active second arena run, and its DTI aliens appear when it's first
-shown (so behind a door as it opens). Not done yet: every reachable arena is still drawn and solid
-and rays hit them all; arenas aren't deactivated (loop sounds keep playing); type 4 DTI records
-(static objects) aren't spawned; doors aren't moved into a newly loaded arena.
+shown (so behind a door as it opens). Only Kurt's arena and the active second one are drawn, with
+their objects; an arena in neither slot any more stops its objects' loop sounds, which start again
+when it comes back. Not done yet: every reachable arena is still solid for Kurt (the port picks
+Kurt's arena by its box, not by crossing connections, so this is safer) and rays hit them all;
+projectiles and effects of an arena put away aren't destroyed; type 4 DTI records (static objects)
+aren't spawned; doors aren't moved into a newly loaded arena.
 
 ### Doors (0x43cc68)
 

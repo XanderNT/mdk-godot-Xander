@@ -47,7 +47,8 @@
   with smoke trails and gore.
 - The full-screen strike before Bones' air strike and Kurt's final strike.
 - The second arena (behind an open door, the one just left): its objects and script run, its
-  aliens appear as the door opens; `arena_show`, `arena_set_neighbour` and the trigger records.
+  aliens appear as the door opens; `arena_show`, `arena_set_neighbour` and the trigger records;
+  only Kurt's and the second arena are drawn, arenas put away stop their loop sounds.
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
@@ -59,8 +60,8 @@
 
 ## Next
 
-1. **Aliens and scripts**: drawing and colliding with only Kurt's and the second arena, arena
-   deactivation (loop sounds, projectiles), type 4 DTI objects, the chasing aliens' hitscan.
+1. **Aliens and scripts**: colliding and casting rays with only Kurt's and the second arena,
+   projectiles and effects of arenas put away, type 4 DTI objects, the chasing aliens' hitscan.
 2. **Sniper mode**: the 3D clip on the screen and the air strike's iris.
 3. **Sound**: the sounds of mechanics not done yet (pickups running away, the snowboard, the
    `XE` ride), the sound options' `OPTSONG`.
