@@ -35,8 +35,6 @@ const RADAR_RADIUS := 10.0
 const RADAR_SEE := 15.0
 ## Radar colours −(0x405 + c): the palette blended towards green by these / 256 ❓.
 const RADAR_ALPHA := [48, 64, 80, 96, 128]
-const MISSILE_SPEED := 250.0
-const MISSILE_FREE_TICKS := 60
 const PICKUP_FALL_SPEED := 2 * KURT_SPEED
 const PICKUP_CHUTE_SPEED := 50.0
 const BONES_SPEED := 2000.0 / 27.0
@@ -56,12 +54,6 @@ class Thing:
 	var position := Vector3()
 	var velocity := Vector3()
 	var ticks := 0.0
-
-
-class Missile extends Thing:
-	var offset := Vector3()
-	var passed := -1.0
-	var trail: Array[Vector3] = []
 
 
 class Pickup extends Thing:
@@ -141,7 +133,7 @@ var _radar_velocity := Vector2()
 var _radar_ticks := 0
 var _radar_wait := 0
 
-var _missiles: Array[Missile] = []
+var _missiles: Array[FallMissile] = []
 var _missile_queue := 0
 var _missile_wait := 0
 var _trails := MeshInstance3D.new()
@@ -693,31 +685,16 @@ func _update_missiles(dt: float, ticks: int) -> void:
 			_missile_queue -= 1
 			_missile_wait = _missile_gap + (randi() & 31)
 			_launch_missile()
-	for missile: Missile in _missiles.duplicate():
+	for missile: FallMissile in _missiles.duplicate():
 		var previous := missile.position
-		missile.ticks += ticks
-		if missile.ticks > MISSILE_FREE_TICKS:
-			var dz := _kurt.position.z - missile.position.z
-			var aim := _kurt.position + Vector3(missile.offset.x, missile.offset.y, -minf(dz / 225.0, 10.0) * KURT_SPEED)
-			for i in ticks:
-				missile.velocity = 0.8 * missile.velocity + 0.2 * MISSILE_SPEED * (aim - missile.position).normalized()
-		missile.position += missile.velocity * dt
-		if missile.position.z < 0.75 * _kurt.position.z:
-			missile.position.z += 3.0 * missile.velocity.z * dt
-		for i in ticks:
-			missile.trail.push_back(missile.position)
-		while missile.trail.size() > 32:
-			missile.trail.pop_front()
+		var event := missile.update(dt, ticks, _kurt.position)
 		_orient(missile.node, missile.velocity)
 		missile.node.position = MDKMeshBuilder.to_godot(missile.position)
-		if missile.passed < 0.0 and missile.position.z > _kurt.position.z + 5.0:
-			missile.passed = 0.0
+		if event == FallMissile.Event.PASSED:
 			_play("M_PASS")
-		if missile.passed >= 0.0:
-			missile.passed += ticks
-			if missile.passed > 60.0:
-				_remove_missile(missile)
-				continue
+		if event == FallMissile.Event.GONE:
+			_remove_missile(missile)
+			continue
 		if _time <= STEER_TIME and not _dying and _crosses_kurt(previous, missile.position):
 			_hit(missile)
 	_build_trails()
@@ -727,15 +704,12 @@ func _launch_missile() -> void:
 	_play("M_LNCH")
 	_rate = 3.0
 	_target = maxf(_target - 0.2, 0.5)
-	var missile := Missile.new()
-	var a := randf() * TAU
-	missile.velocity = Vector3(sin(a), cos(a), 1.0) * MISSILE_SPEED
-	missile.offset = Vector3(randf_range(-_spread, _spread), randf_range(-_spread, _spread), 0.0)
+	var missile := FallMissile.new(_spread)
 	missile.node = _make_node("MISSILE")
 	_missiles.push_back(missile)
 
 
-func _remove_missile(missile: Missile) -> void:
+func _remove_missile(missile: FallMissile) -> void:
 	missile.node.queue_free()
 	_missiles.erase(missile)
 
@@ -757,7 +731,7 @@ func _crosses_kurt(from: Vector3, to: Vector3) -> bool:
 
 
 ## A missile hits Kurt: an explosion, damage and a sound.
-func _hit(missile: Missile) -> void:
+func _hit(missile: FallMissile) -> void:
 	_play(["EXPLODE1", "EXPLODE2"][randi() & 1])
 	_play(HIT_SOUNDS[randi() % HIT_SOUNDS.size()])
 	var damage := 4

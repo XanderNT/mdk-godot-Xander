@@ -81,6 +81,7 @@ to look around, Shift to go faster.
 - `tools/ghidra/`: Ghidra setup and scripts used for reverse engineering, and the names of
   reverse engineered functions.
 - `tools/python/`: reference decoders used to validate formats.
+- `tests/`: headless tests (`godot --headless --path . -s tests/<name>_test.gd`).
 
 ## Legal
 

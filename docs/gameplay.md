@@ -620,8 +620,10 @@ one disappears (`R_START` plays).
 - Each frame: move; while below 0.75 × Kurt's z, z moves 3 × more (4 × its vertical speed); the
   `MISSILE` model is oriented along its velocity (0x4123e8).
 - For 60 ticks it just flies; then it homes: with `dz` = Kurt z − its z, it aims at Kurt +
-  (offset x, offset y, −min(dz / 225, 10) × 66.67) and steers `v = 0.8 v + 0.2 × 250 × unit`. Once
-  it's more than 5 u above Kurt it has passed (`M_PASS`) and is removed 60 ticks later.
+  (offset x, offset y, −min(dz / 225, 10) × 66.67) and steers `v = 0.8 v + 0.2 × 250 × unit` once
+  per frame. Once it's more than 5 u above Kurt (`dz ≤ −5`) it has passed (`M_PASS`, timer
+  `+0x11c` −1): it no longer homes, flies straight on and is removed 60 ticks later. A missile Kurt
+  dodges doesn't come back.
 - **Hit** (segment vs Kurt's box, until t = 30 s): `EXPLODE1`/`EXPLODE2` and one of `K_HIT1`–`K_HIT7`;
   damage 4 (easy), 4 + rand(8) (normal), twice 4 + rand(8) (hard), health clamped at 0. The missile
   becomes an explosion: model `EXPLODE` with the animated `EXPLODE` texture (26 frames), following
