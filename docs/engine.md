@@ -312,8 +312,9 @@ otherwise it explodes (0x43d224):
 
 - The object's explosion sound (`obj+0x154`, opcode 25) or `EXPLODE`, and a screen shake by
   distance.
-- Debris: the model's break-up parts (model record `+0x84`) fly off as particles, and gore when
-  the option `0x5742dc` is on.
+- Debris: the parts of the break-up model `<model>D` (model record `+0x84`) fly off, or 16 fire
+  sparks without one, and gore when the option `0x5742dc` is on; a white flash by distance (see
+  [Sparks and explosion debris](#sparks-and-explosion-debris)).
 - An explosion object using the global model 0 (`EXPLODE`: 21 triangles with a 26-frame animated
   texture): its texture shows one frame per tick and the object vanishes after the last one. It's
   scaled to 1.5 × the object's height over the explosion model's, faces the shooter (yaw + 180°)
@@ -621,6 +622,188 @@ every update (+0x44), velocity in units per tick (+0x18a), life in ticks (+0x196
 - The port draws the sprites as billboards (`MDKEffects`) and moves them every tick. A wound's blob
   sits at the reference point of the model's rest pose ❓ (the original's hot points follow the
   object's matrix, perhaps the animation too).
+
+## Sparks and explosion debris
+
+### Sparks (`effect_spark` 0x4052d4) ✅
+
+`0x4052d4(effect, point, pool, index, size, colour, range)`; `index` is unused.
+
+- **Size**: `s = (1 + R(2⁻¹⁵)) × size` → `[0.5, 1.5) × size`.
+- **Geometry**: a tetrahedron, 4 vertices (+0x156) and 4 triangles (`+0x8c = 4`, `+0x90 = 4`):
+  vertex `i = (T[i] + (R(2e-5), R(2e-5), R(2e-5))) × s` (jitter ±0.33 per axis) with the table
+  0x404b00:
+
+  | i | T[i] |
+  | --- | --- |
+  | 0 | (0, 0, 0.5) |
+  | 1 | (0.5, 0, −0.5) |
+  | 2 | (−0.5, 0.5, −0.5) |
+  | 3 | (−0.5, −0.5, −0.5) |
+
+  Triangles (0,2,1), (0,3,2), (0,1,3), (1,2,3), normals precomputed (0x405db0, +0x126). Collision
+  box ±0.5·s (+0x74..+0x88).
+- **Position**: `point + (R(2⁻¹⁴), R(2⁻¹⁴), R(2⁻¹⁵))` → ±1, ±1, ±0.5. Matrix rotation starts as
+  identity.
+- **Velocity** (units/tick): `vx, vy = R(2⁻¹⁴)` (±1), `vz = (rand() − 0x800) × 2⁻¹⁴` (−0.125…+1.875):
+  mostly upwards.
+- **Spin** (+0x44, applied once per update, `M = M × S`): `0x46de70(a, b, c, scale 1, t 0)` with
+  three angles `(rand() − 0x41c2) × 28/32768` → −14.4°…+13.6° each (slightly biased negative).
+- **Life**: `(rand() >> 9) + 60` → 60–123 ticks.
+- **Update**: `0x4061d8` (movement of drops/debris: `pos += v·ticks` with sweep 0x407e2c; else
+  `vz −= ticks × 0.284444 × 0.25`; a hit puts it at the contact, `v −= 1.4 (v·n) n`, life −20; fans
+  push it (mask 8); deleted at life ≤ 0). If `s ≥ 1` and `rand() & 3 == 0` the update is 0x406004
+  instead: it also leaves a **smoke trail** (below) every 1 or 2 ticks (`(rand() & 1) + 1`, fixed per
+  effect). Only size-1.0 sparks can reach `s ≥ 1` (half of them), so 1/8 of those trail.
+- **Draw** (0x406e24): each front-facing triangle (screen winding) is a **flat, opaque, untextured**
+  triangle (negative material = palette colour, see [formats.md](formats.md#world-section--arena_parse_world)):
+
+  ```
+  d      = min(0, n · camrow2)      n = face normal, camrow2 = 3rd row of camera × effect matrix
+  colour = round(base + range × |d|)   base = +0x94 (u8), range = +0x95 (signed s8)
+  ```
+
+  So the face turned to the camera gets `base + range`, edge-on faces `base`. Not lit otherwise.
+  Palette indices < 64 are the DTI's shared colours (same in every level).
+
+#### Colour sets
+
+| Caller | size | base, range | Indices | Colours |
+| --- | --- | --- | --- | --- |
+| kind 0, gore on (`0x5742dc` ≠ 0) | 0.5 | 3, 3 | 3–6 | green 00ff00 → 009700 → 006300 (6 = cyan, face-on only) |
+| kind 0, gore off | 0.5 | 13, 3 | 13–16 | blue 0000ff → 0000c3 → 000087 → black |
+| kind 1 | 0.5, v × 0.5 | 0x25, 0xf0 (−16) | 37 → 21 | dark grey 130b0b (edge-on) → light beige b7bb93 (face-on) |
+| kind ≥ 2 | 0.5 | 10, 3 | 10–13 | orange ff6400 → red → dark red 8c0000 (13 = blue, face-on only) |
+| fire (explosions, fans, nuke) | 1.0 or 0.5 | 0x30, 0x10 | 48–64 | fire ramp 0f0000 → a34700 → ffff4f → white (64 = the arena's first colour ❓) |
+
+### Smoke trail (0x406070) ✅
+
+Priority 10. A `TRAIL` sprite (0x407048) at the moving effect's position: scale +0xa0 = 4
+(`width × 4 / 256` units), speed 1 frame/tick, life 11 ticks, velocity 0 but moved by 0x4061d8 (so it
+falls under gravity), box ±0.5.
+
+### Spark bursts (`spark_burst` 0x41e8f4) ✅
+
+`0x41e8f4(arena, point, sound, count, kind)`:
+
+1. `kind` picks the colour set above (kind 1 also multiplies the velocity by 0.5).
+2. **Sound**: when the arena's effect list is empty, or `count > 1`, or `frame_counter & 3 == 0`
+   (0x573aa4, counted in frames, not ticks): the named sound (`obj+0x150`, opcode 26) or
+   `RICO1`/`RICO2`/`RICO3` (`rand_below(3)`), 3D, flags 0x10106, volume 0x7fff, pitch 1, range 50.
+   The sparks themselves are spawned **every call** (every frame the chain gun hits).
+3. `count` sparks `0x4052d4(…, 0.5, base, range)` at **priority 0** (they never steal a pool slot;
+   dropped when the pool is full).
+
+Callers:
+
+| Caller | Point | count | kind |
+| --- | --- | --- | --- |
+| Chain gun on an object (0x41a304) | box centre − ½ box size × aim dir (x, y) | 1 | `obj+0x21f` (indestructible flag: 0 normal → green, 1 → kind 1); weak-part hit → 0 |
+| Chain gun on the arena | ray hit − 1 unit along the aim | 1 | 2 if the group reacted (0x40d560 bit 0), else 1 |
+| Kurt's rounds on an object, not killed (0x462708) | hit point (`obj+0x210`) | 3 | `obj+0x21f` |
+| Kurt's rounds on the arena (0x462eb4) | hit point | 1 / 3 | 2 if the group reacted (1 spark), else 1 (3 sparks) |
+| Chasing aliens' hitscan (0x45ec18, from command 6 0x45e448) | on Kurt / arena hit | 1 | 0 on Kurt (+ `hurt_kurt 1` 0x46a498) / 1 on the arena |
+
+**Chasing aliens' hitscan** ❓ (not in the port): every frame the chaser faces its target within 30°,
+it casts a ray 150 units along `(0.866 cos yaw, 0.866 sin yaw, −0.5)` (30° down). If Kurt's position
+projects on it at `0 < t < 150`, horizontally within √3 of the ray and `Kurt z − 0.5 < z < Kurt z + 5`,
+Kurt is hit; otherwise the ray is tested against the arena (then the neighbour arena).
+
+Other `0x4052d4` callers (fire colours):
+
+- Fans (0x414230): one spark in 8 frames at a random point of the box (`z0 + 0.25`), size 0.5,
+  velocity 0; the updraft lifts it (already in engine.md).
+- The nuke (0x43efcc): 16 sparks, size 1.0, priority 20, plus 2 blasts and `EXPLODE`.
+- Explosion fallback (0x43d224) and body-part bounces (0x406ccc), below.
+
+### Object explosion (`object_explode` 0x43d224) ✅
+
+Called by `object_kill` when there is no death script, with the hit point and a yaw.
+
+1. The object's 8 attached effects (`obj+0x160`) and tracked sound (`obj+0x158`) are freed. Movement
+   command 15 (alarm) sets 0x573af0 = 10.
+2. Sound `obj+0x154` (opcode 25) or `EXPLODE`, 3D, flags 0x10006, range 200.
+3. **White flash** (0x573b68, not the shake): `flash += round(1000 / distance(Kurt, point))`, clamped to
+   0…150 (skipped at distance 0).
+4. **Debris**, from the break-up model `M = model record + 0x84`:
+   - M exists: if it's an arena ("overlay") model not yet loaded (`+0xa ≠ 0`, `+0x20 = 0`),
+     `model_instance_create` resolves it in the arena (a copy linked in 0x573c6c); failing that
+     (not found) it counts as absent.
+   - **No break-up model**: 16 sparks at the object's position (`obj+0x10`), size 1.0, fire colours,
+     priority 20. No gore.
+   - **Break-up model**: for each part of M, the part with the same name (case-insensitive) in the
+     object's model is looked up; if it exists and is hidden (`obj+0x2c8` bit) the piece is skipped.
+     Otherwise one piece `0x405900(effect, obj, part, M+0x10 materials)` at priority 30.
+     Then, with gore on (`0x5742dc`), up to 32 drops (0x406b3c, stops when the pool refuses one):
+     at the object's position (matrix `obj+0xac`), velocity `obj+0x18c + (R(2⁻¹⁴), R(2⁻¹⁴),
+     (rand() − 0x800) × 2⁻¹⁴)`, sprite scale `5 + rand() × 5e-5` (5…6.64), `SL_MED`/`SL_SMA`.
+5. The object is removed (0x43d7bc).
+6. **Explosion object**: a new object with the global model 0 (`EXPLODE`) at the point, yaw = the given
+   yaw (also previous yaw), health 0, animation frame −1 / time −1, flags `+0x148 |= 0x20`, scale
+   `+0x58 = 1.5 × (obj+0x1ac − obj+0x1a0) / (model0 z max − z min)` (the pose-bounds height over the
+   explosion model's). Pitch `+0x13c = atan2(dz, h)` (0x440220) with `h` = horizontal distance from
+   the camera (0x5738ec) and `dz = camera z + 5 − point z`, only when `h > 5` or `|dz| > 8`, else 0.
+
+#### Break-up pieces (0x405900) ✅
+
+- Draw: `+0x8c = 1` part, `+0x94` = the break-up part, `+0x90` = M's material table; drawn textured
+  with `model_draw_parts` (0x407394). Part vertices are model-space absolute, so the piece starts
+  exactly where that part of the model sits.
+- Matrix: `0x46df5c(bank obj+0x54, yaw obj+0x4c, obj position)` = `Rz(yaw) · Rx(bank)` + position,
+  then **z + 2**. No object scale, no animation pose (the break-up model is static) ❓.
+- Velocity: `obj+0x18c` (the object's measured velocity per tick) `+ (R(2⁻¹⁴), R(2⁻¹⁴),
+  (rand() − 0x800) × 2⁻¹⁴)`, i.e. like a spark: ±1, ±1, −0.125…+1.875 units/tick.
+- Spin: three angles `(rand() − 0x41c2) × 28/32768` (±14°) per update, `M = M × S`: the piece
+  rotates about the **model origin**, not its own centre, so outlying parts swing wide.
+- Life `(rand() >> 9) + 60` (60–123 ticks); box ±0.5 (+0x74..+0x88).
+- Update 0x4061d8 (as sparks); `rand() & 3 == 0` (1/4) → 0x406004: a smoke trail every 1–2 ticks.
+- **"body" parts** (dead code ✅): a part whose name contains lowercase `"body"` (case-sensitive
+  `strstr`, 0x479802, string 0x4932ec) would get the object's velocity exactly, a spin of ±4°
+  (`× 8/32768`), always a trail, and on its first bounce (0x406ccc) life −300, a 64×64 `TRAIL` puff
+  (scale 16, 12 frames, life 11) and 8 fire sparks. All part names are uppercase (`XG1_BODY`…), so
+  this never happens.
+- Flag `+0x186 & 8` (explosion 0x43cb2c when the effect dies) is never set.
+
+#### Which models break up ✅
+
+The loader (`level_load` 0x41b0c0, after `cmi_load_model_table`) links every CMI global model
+record `X` (80 × 0x88 at 0x520a84) to the record named `X + "D"` (`"%sD"`, 0x49447c) via `+0x84`.
+Arena-only models have none ❓. Dump (CMI second directory + `mdk_models.py`, overlays resolved in
+the level's arenas):
+
+| Model → break-up | Levels | Pieces |
+| --- | --- | --- |
+| XG → XGD | 3–8 | 9: `XGD_GUN, SHDR, TOER, TGHR, TGHL, HND, SHDL, HEAD, BODY` (names differ from `XG1_*`: never skipped) |
+| XF → XFD | 3–8 | 6 (`XF1_H01, XF1_BODY`, 4 missiles); levels 5–6: 9 (+ `OBJECT01–03`) |
+| XD → XDD | 3–8 | 6 (`XDD_FACE, LEGL, LEGR, BODLFT, HEAD`, `X_ENEMA`) |
+| XS → XSD | 3–8 | 15, same names as XS (hidden parts skipped) |
+| XC → XCD | 3–8 | 20, same names as XC |
+| XGEN → XGEND | 3–8 | 8–9 (`CAP1–3`, `XGENT`, `XGENBASE`, extra `XGEN0x`/`CAP0x`) |
+| XE → XED | 3, 4, 7, 8 | 7–8 (`XB`, `XB_UNDER`, thrusters…) |
+| XT → XTD | 3, 6, 8 | 19, same names as XT |
+| XTGUN → XTGUND | 3, 4, 5 | 13 |
+| XTANK → XTANKD, XTANKT → XTANKTD | 4, 7 | 6 and 4 |
+| XW3 → XW3D | 3 | 25 (wheel + 24 single-triangle shards `XWD_Gnn`) |
+| XCARGO → XCARGOD | 8 | 14 (huge: parts up to 185 units) |
+| XU → XUD, XPER → XPERD, XMART → XMARTD | 3, 8 | not found in any arena → fallback sparks |
+
+### Other explosions ✅
+
+- `explosion_spawn` 0x43cb2c(arena, point, scale): only the `EXPLODE` object (yaw and pitch towards the
+  camera; pitch uses `dz = camera z + 3 − point z` (0x4969ac) with the same 5/8 thresholds, where
+  0x43d224 uses +5) and the `EXPLODE` sound; **no sparks, debris or flash**. Scale 2.0 for Kurt's rounds types 2–4
+  (0x4638cc) and item bombs (0x43deac), 3.0 for the World's Most Interesting Bomb (0x43f18c).
+- The nuke (0x43efcc) adds 16 fire sparks (above).
+
+### In the port
+
+`MDKDebris` moves the sparks and the break-up pieces with the shattered triangles (one mesh rebuilt
+every tick; sparks as flat vertex-coloured triangles, `colour = base + range × |facing|`); smoke
+trails are `MDKEffects` `TRAIL` sprites. `MDKScriptRuntime.spark()` makes the bursts (kinds
+`FLESH`, `HARD`, `GROUP`, `FIRE`; the gore option is taken as on, so flesh sparks are green), and
+`explode()` the break-up, gore drops, white flash and pitch thresholds; the nuke adds its 16 fire
+sparks. Test: `--sparks`. Not done: the chasing aliens' hitscan, fire sparks for the fans (they're
+`CPUParticles3D`), the "is the pool empty" rule of the ricochet sound.
 
 ## Shattered triangle groups (`shatter_group` 137–139, 0x40c828)
 

@@ -7,7 +7,7 @@
 class_name MDKEffects
 extends Node3D
 
-enum Kind { WOUND, DROP, BUBBLE, POP }
+enum Kind { WOUND, DROP, BUBBLE, POP, TRAIL }
 
 ## Most effects alive at once.
 const MAX_EFFECTS := 96
@@ -77,6 +77,14 @@ func spawn_drop(arena_name: String, point: Vector3, velocity: Vector3, scale: fl
 		effect.life = effect.frames * 4 - 1
 
 
+## A puff of the smoke trail of sparks and pieces (0x406070): `TRAIL`, one frame per tick for 11
+## ticks, falling.
+func spawn_trail(arena_name: String, point: Vector3) -> void:
+	var effect := _create(arena_name, "TRAIL", Kind.TRAIL, point, 4.0, 1.0)
+	if effect:
+		effect.life = 11
+
+
 ## A bubble (0x406434): `BUBB`, rising, growing and wobbling, then popping.
 func spawn_bubble(arena_name: String, point: Vector3) -> void:
 	var effect := _create(arena_name, "BUBB", Kind.BUBBLE, point, (randi() % 32768 - 0x4000) * 0.0002 + 10.0, 0.5)
@@ -135,7 +143,7 @@ func update(ticks: float) -> void:
 		match effect.kind:
 			Kind.WOUND:
 				_update_wound(effect, ticks)
-			Kind.DROP:
+			Kind.DROP, Kind.TRAIL:
 				_move(effect, ticks)
 				effect.life -= ticks
 			Kind.BUBBLE:
@@ -194,11 +202,11 @@ func _move(effect: Effect, ticks: float) -> bool:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		effect.position += motion
-		if effect.kind == Kind.DROP:
+		if effect.kind in [Kind.DROP, Kind.TRAIL]:
 			effect.velocity.z -= GRAVITY * ticks
 		return false
 	effect.position = MDKScriptRuntime.to_mdk(hit.position)
-	if effect.kind == Kind.DROP:
+	if effect.kind in [Kind.DROP, Kind.TRAIL]:
 		var normal := MDKScriptRuntime.to_mdk(hit.normal)
 		effect.velocity -= normal * effect.velocity.dot(normal) * BOUNCE
 		effect.life -= BOUNCE_TICKS

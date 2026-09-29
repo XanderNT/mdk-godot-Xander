@@ -4,6 +4,10 @@
 ## larger than `size / 4` (0x40cbe0, 0x40d014); every piece becomes a double-sided effect
 ## (0x40564c) that flies away from the point (or along the direction), spins, falls, bounces off the
 ## arena and vanishes after its lifetime (0x4061d8).
+##
+## The same movement carries sparks (0x4052d4: small tetrahedra in one palette colour, brighter
+## when facing the camera) and the pieces an object breaks into when it explodes (0x405900: the
+## parts of its `<model>D` break-up model). Some of them leave a smoke trail (0x406004).
 class_name MDKDebris
 extends Node3D
 
@@ -15,13 +19,28 @@ const BOUNCE := 1.4
 const BOUNCE_TICKS := 20
 ## Most pieces alive at once (the original shares a pool of effects).
 const MAX_PIECES := 600
+## A spark's tetrahedron (0x404b00), jittered by ±0.33 and scaled by its size.
+const SPARK_CORNERS := [Vector3(0, 0, 0.5), Vector3(0.5, 0, -0.5), Vector3(-0.5, 0.5, -0.5), Vector3(-0.5, -0.5, -0.5)]
+const SPARK_FACES := [0, 2, 1, 0, 3, 2, 0, 1, 3, 1, 2, 3]
+## Sparks and pieces live 60–123 ticks; one in 4 leaves a smoke trail every 1–2 ticks.
+const LIFE_MIN := 60
+const RAND_HALF := 0x4000
+## Pieces start 2 units above the object.
+const BREAK_UP_RISE := 2.0
 
 
 class Piece:
-	var material: Material
-	## Corners relative to the centre (MDK space), and their UVs.
+	## A material per triangle, or none for a spark (drawn in palette colours `base … base + range`).
+	var materials: Array[Material] = []
+	var colour_base := 0
+	var colour_range := 0
+	## Corners relative to the centre (MDK space, 3 per triangle), and their UVs.
 	var corners := PackedVector3Array()
 	var uvs := PackedVector2Array()
+	var arena := ""
+	## A smoke trail every this many ticks (0: none).
+	var trail_every := 0
+	var trail_ticks := 0
 	var center := Vector3()
 	## Units per tick.
 	var velocity := Vector3()
@@ -32,11 +51,17 @@ class Piece:
 
 
 var level: Level
+var _spark_material := StandardMaterial3D.new()
+## Leaves a smoke puff: `(arena name, point)` (see `MDKEffects.spawn_trail()`).
+var trail: Callable
 var _pieces: Array[Piece] = []
 var _mesh := MeshInstance3D.new()
 
 
 func _ready() -> void:
+	_spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_spark_material.vertex_color_use_as_albedo = true
+	_spark_material.vertex_color_is_srgb = true
 	_mesh.mesh = ArrayMesh.new()
 	add_child(_mesh)
 
@@ -84,7 +109,7 @@ func _split(corners: PackedVector3Array, uvs: PackedVector2Array, material: Mate
 				material, max_cross, life, speed, point, direction, radial, far)
 		return
 	var piece := Piece.new()
-	piece.material = material
+	piece.materials = [material]
 	piece.center = (corners[0] + corners[1] + corners[2]) / 3.0
 	for corner in corners:
 		piece.corners.push_back(corner - piece.center)
@@ -101,6 +126,72 @@ func _split(corners: PackedVector3Array, uvs: PackedVector2Array, material: Mate
 	piece.spin = Basis.from_euler(angles * PI / 180.0)
 	piece.ticks = roundi(life * 30.0)
 	_pieces.push_back(piece)
+
+
+## Sparks (0x41e8f4, 0x4052d4) at `point`: `size` 0.5 or 1.0, palette colours `base` to
+## `base + range` (e.g. 3, 3: green), velocity scaled by `speed`.
+func spark(arena_name: String, point: Vector3, count: int, size: float, base: int, range: int, speed := 1.0) -> void:
+	for i in count:
+		if _pieces.size() >= MAX_PIECES:
+			return
+		var piece := Piece.new()
+		var s := (1.0 + _rand_half() / 32768.0) * size
+		var corners: Array[Vector3] = []
+		for corner: Vector3 in SPARK_CORNERS:
+			corners.push_back((corner + Vector3(_rand_half(), _rand_half(), _rand_half()) * 2e-5) * s)
+		for k: int in SPARK_FACES:
+			piece.corners.push_back(corners[k])
+		piece.colour_base = base
+		piece.colour_range = range
+		piece.center = point + Vector3(_rand_half() / 16384.0, _rand_half() / 16384.0, _rand_half() / 32768.0)
+		_launch(piece, arena_name, speed)
+		# Only the bigger sparks can trail.
+		if s < 1.0:
+			piece.trail_every = 0
+		_pieces.push_back(piece)
+
+
+## An object's break-up (0x405900): one piece per part of its break-up model, placed like the
+## object (yaw and bank) 2 units higher, thrown with its velocity plus a spark's; parts hidden on
+## the object stay behind.
+func break_up(obj: MDKObject, model: MDKModel, resolver: MDKMeshBuilder.MaterialResolver) -> void:
+	var basis := Basis(Vector3.BACK, deg_to_rad(obj.yaw)) * Basis(Vector3.RIGHT, deg_to_rad(obj.roll))
+	var velocity := obj.mdk_position - obj.previous_position
+	for part in model.parts:
+		if _pieces.size() >= MAX_PIECES:
+			return
+		var index := obj.find_part(part.name)
+		if index >= 0 and obj.hidden_parts & (1 << index):
+			continue
+		var piece := Piece.new()
+		for t in part.triangle_materials.size():
+			var material := resolver.get_material(part.triangle_materials[t], model.materials)
+			# UVs are in texels of the texture.
+			var uv_scale: Vector2 = material.get_meta(&"uv_scale", Vector2.ZERO) if material else Vector2.ZERO
+			piece.materials.push_back(material)
+			for k in 3:
+				piece.corners.push_back(basis * part.vertices[part.triangle_indices[t * 3 + k]])
+				piece.uvs.push_back(part.triangle_uvs[t * 3 + k] * uv_scale)
+		piece.center = obj.mdk_position + Vector3(0, 0, BREAK_UP_RISE)
+		_launch(piece, obj.arena, 1.0)
+		piece.velocity += velocity
+		_pieces.push_back(piece)
+
+
+## A spark's start (0x4052d4): thrown mostly upwards (±1, ±1, −0.125…1.875 units per tick), a
+## random spin of about ±14° per tick, 60–123 ticks of life, one in 4 trailing smoke.
+func _launch(piece: Piece, arena_name: String, speed: float) -> void:
+	piece.arena = arena_name
+	piece.velocity = Vector3(_rand_half() / 16384.0, _rand_half() / 16384.0, (randi() % 32768 - 0x800) / 16384.0) * speed
+	var angles := Vector3(randi() % 32768 - 0x41c2, randi() % 32768 - 0x41c2, randi() % 32768 - 0x41c2) * 28.0 / 32768.0
+	piece.spin = Basis.from_euler(angles * PI / 180.0)
+	piece.ticks = ((randi() % 32768) >> 9) + LIFE_MIN
+	if randi() & 3 == 0:
+		piece.trail_every = (randi() & 1) + 1
+
+
+func _rand_half() -> int:
+	return randi() % 32768 - RAND_HALF
 
 
 func piece_count() -> int:
@@ -132,31 +223,74 @@ func update(ticks: float) -> void:
 		piece.ticks -= roundi(ticks)
 		if piece.ticks <= 0:
 			_pieces.remove_at(i)
+			continue
+
+		# The smoke trail (0x406070).
+		if piece.trail_every > 0 and trail.is_valid():
+			piece.trail_ticks += roundi(ticks)
+			if piece.trail_ticks >= piece.trail_every:
+				piece.trail_ticks = 0
+				trail.call(piece.arena, piece.center)
 	_build_mesh()
 
 
 func _build_mesh() -> void:
 	var mesh: ArrayMesh = _mesh.mesh
 	mesh.clear_surfaces()
-	var by_material := {}
+
+	# Textured triangles by material, both windings (the pieces are double-sided).
+	var positions_by := {}
+	var uvs_by := {}
+	var sparks: Array[Piece] = []
 	for piece in _pieces:
-		if not by_material.has(piece.material):
-			by_material[piece.material] = []
-		by_material[piece.material].push_back(piece)
-	for material: Material in by_material:
-		var positions := PackedVector3Array()
-		var uvs := PackedVector2Array()
-		for piece: Piece in by_material[material]:
-			var corners: Array[Vector3] = []
-			for corner in piece.corners:
-				corners.push_back(MDKMeshBuilder.to_godot(piece.center + piece.orientation * corner))
-			# Both windings: the pieces are double-sided.
+		if piece.materials.is_empty():
+			sparks.push_back(piece)
+			continue
+		for t in piece.materials.size():
+			var material := piece.materials[t]
+			if not material:
+				continue
+			if not positions_by.has(material):
+				positions_by[material] = PackedVector3Array()
+				uvs_by[material] = PackedVector2Array()
 			for k: int in [0, 1, 2, 0, 2, 1]:
-				positions.push_back(corners[k])
-				uvs.push_back(piece.uvs[k])
+				positions_by[material].push_back(MDKMeshBuilder.to_godot(piece.center + piece.orientation * piece.corners[t * 3 + k]))
+				uvs_by[material].push_back(piece.uvs[t * 3 + k])
+	for material: Material in positions_by:
+		var positions: PackedVector3Array = positions_by[material]
+		var uvs: PackedVector2Array = uvs_by[material]
 		var arrays := []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = positions
 		arrays[Mesh.ARRAY_TEX_UV] = uvs
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
+	_build_sparks(mesh, sparks)
+
+
+## Sparks (0x406e24): flat triangles, palette colour `base + range × |facing|` where `facing` is how
+## much the face turns to the camera (face-on: `base + range`, edge-on: `base`).
+func _build_sparks(mesh: ArrayMesh, sparks: Array[Piece]) -> void:
+	var camera := get_viewport().get_camera_3d()
+	if sparks.is_empty() or not camera or not level:
+		return
+	var view := MDKScriptRuntime.to_mdk(-camera.global_basis.z)
+	var palette := level.get_palette()
+	var positions := PackedVector3Array()
+	var colours := PackedColorArray()
+	for piece in sparks:
+		for t in piece.corners.size() / 3:
+			var a := piece.orientation * piece.corners[t * 3]
+			var b := piece.orientation * piece.corners[t * 3 + 1]
+			var c := piece.orientation * piece.corners[t * 3 + 2]
+			var facing := absf((b - a).cross(c - a).normalized().dot(view))
+			var colour := palette.get_color(clampi(roundi(piece.colour_base + piece.colour_range * facing), 0, 255))
+			for corner: Vector3 in [a, b, c, a, c, b]:
+				positions.push_back(MDKMeshBuilder.to_godot(piece.center + corner))
+				colours.push_back(colour)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = positions
+	arrays[Mesh.ARRAY_COLOR] = colours
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, _spark_material)

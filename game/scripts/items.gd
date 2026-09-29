@@ -295,6 +295,8 @@ func _update_nuke(obj: MDKObject) -> void:
 	blast(center, 200, 60.0, 6, HIT_NUKE, null)
 	blast(center, 19, 60.0, 1, HIT_NUKE, null)
 	runtime.play_sound_at("EXPLODE", center)
+	var fire: Vector2i = MDKScriptRuntime.SPARK_COLOURS[MDKScriptRuntime.Spark.FIRE]
+	runtime.debris.spark(obj.arena, center, MDKScriptRuntime.FIRE_SPARKS, 1.0, fire.x, fire.y)
 	runtime.spawn_explosion(obj.arena, center, 3.0)
 	runtime.remove(obj)
 

@@ -228,8 +228,11 @@ func _move_straight(round: Round, dt: float) -> void:
 	if not wall.is_empty():
 		# The point is taken back a unit off the wall.
 		round.position = wall_point + MDKScriptRuntime.to_mdk(wall.normal)
-		runtime.hit_group_at(wall, DAMAGE if round.type < 2 else 0, MDKScriptRuntime.HIT_SHOT, round.type)
-		runtime.spark(round.position, 3)
+		# A reacting group gets one orange spark, a wall 3 grey ones.
+		if runtime.hit_group_at(wall, DAMAGE if round.type < 2 else 0, MDKScriptRuntime.HIT_SHOT, round.type) & 1:
+			runtime.spark(round.position, 1, "", MDKScriptRuntime.Spark.GROUP)
+		else:
+			runtime.spark(round.position, 3, "", MDKScriptRuntime.Spark.HARD)
 		if round.type >= 2:
 			_explode(round, 25.0, null)
 		else:
@@ -374,7 +377,7 @@ func _hit_object(round: Round, obj: MDKObject, part: int, point: Vector3) -> voi
 		runtime.kill(obj, round.yaw + 180.0)
 		_end(round, State.KILLED, 45.0)
 	else:
-		runtime.spark(point, 3, obj.labels[1])
+		runtime.spark(point, 3, obj.labels[1], MDKScriptRuntime.Spark.HARD if obj.indestructible else MDKScriptRuntime.Spark.FLESH)
 		_end(round, State.HIT, 45.0)
 
 

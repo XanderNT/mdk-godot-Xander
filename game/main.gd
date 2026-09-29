@@ -20,6 +20,8 @@
 ##   --spawn-box=TEXTURE       Create a `spawn_box` object showing that texture in front of Kurt.
 ##   --fx                      Effects test after the delay: slime drops and bubbles in front of
 ##                             Kurt, a wound and bullet holes on the first grunt (`XG`).
+##   --sparks                  Sparks of every kind in front of Kurt after the delay, and the first
+##                             grunt (`XG`) explodes.
 ##   --shatter=GROUP           Shatter a triangle group of Kurt's arena (`shatter_group` test).
 ##   --probe=x,y               Print the arena surfaces above and below that point.
 ##   --sniper[=zoom[,pitch]]   Enter sniper mode after the delay (zoom 1 to 0.25, pitch in degrees,
@@ -141,6 +143,13 @@ func _ready() -> void:
 				alien.shot_point = scripts.get_world_bounds(alien, alien.get_part_bounds()[part]).get_center()
 				for i in 4:
 					scripts.stamp_bullet_hole(alien)
+	if args.has("sparks"):
+		var ahead := MDKScriptRuntime.to_mdk(kurt.global_position + kurt.get_facing() * 15.0) + Vector3(0, 0, 4)
+		for kind in MDKScriptRuntime.Spark.size():
+			scripts.spark(ahead + Vector3(0, 0, kind * 3), 8, "", kind)
+		var grunt := scripts.find_object_named("XG")
+		if grunt:
+			scripts.explode(grunt, 0.0)
 	if args.has("probe"):
 		_probe(args.probe.split_floats(","))
 	if args.has("sniper"):

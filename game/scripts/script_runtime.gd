@@ -157,6 +157,7 @@ func setup(p_level: Level, p_kurt: Kurt) -> void:
 	add_child(effects)
 	debris = MDKDebris.new()
 	debris.level = level
+	debris.trail = effects.spawn_trail
 	add_child(debris)
 	sniper_rounds = MDKSniperRounds.new()
 	sniper_rounds.runtime = self
@@ -796,23 +797,50 @@ func kill(obj: MDKObject, yaw := 0.0) -> void:
 		explode(obj, yaw)
 
 
-## Blows an object up (0x43d224): its explosion sound (opcode 25, or `EXPLODE`), and the global
-## model 0 (`EXPLODE`, an animated texture) scaled to the object's height and turned to the camera.
-## The original also throws the object's parts as debris.
+## Blows an object up (0x43d224): its explosion sound (opcode 25, or `EXPLODE`), a white flash by
+## distance, its pieces flying off, and the global model 0 (`EXPLODE`, an animated texture) scaled
+## to the object's height and turned to the camera.
 func explode(obj: MDKObject, yaw: float) -> void:
 	var bounds := get_world_bounds(obj)
 	var center := bounds.get_center() if obj.model else obj.mdk_position
 	play_sound_at(obj.labels[0] if not obj.labels[0].is_empty() else "EXPLODE", center)
+	_flash_at(center)
+	_break_up(obj)
 	remove(obj)
-	var effect := spawn_explosion(obj.arena, center, 1.0, yaw)
+	var effect := spawn_explosion(obj.arena, center, 1.0, yaw, EXPLOSION_LIFT)
 	if effect:
 		effect.model_scale = bounds.size.z / maxf(effect.model.bounds.size.z, 0.1) * 1.5
 		effect.update_transform()
 
 
+## The white flash of an explosion: `1000 / distance` more, up to 150.
+func _flash_at(point: Vector3) -> void:
+	var distance := kurt_position.distance_to(point)
+	if distance <= 0.0 or kurt.white_flash >= EXPLOSION_FLASH_MAX:
+		return
+	kurt.white_flash = minf(kurt.white_flash + roundf(EXPLOSION_FLASH / distance), EXPLOSION_FLASH_MAX)
+
+
+## The pieces of an exploding object: the parts of its break-up model (`<model>D`) and slime drops,
+## or 16 fire sparks when it has none.
+func _break_up(obj: MDKObject) -> void:
+	var model := find_model(obj.arena, obj.model.name + "D") if obj.model else null
+	if not model:
+		debris.spark(obj.arena, obj.mdk_position, FIRE_SPARKS, 1.0, SPARK_COLOURS[Spark.FIRE].x, SPARK_COLOURS[Spark.FIRE].y)
+		return
+	debris.break_up(obj, model, get_resolver(obj.arena))
+
+	# Slime drops thrown like the pieces.
+	var velocity := obj.mdk_position - obj.previous_position
+	for i in GORE_DROPS:
+		var throw := Vector3(randi() % 32768 - 0x4000, randi() % 32768 - 0x4000, randi() % 32768 - 0x800) / 16384.0
+		effects.spawn_drop(obj.arena, obj.mdk_position, velocity + throw, GORE_SCALE + (randi() % 32768) * 5e-5)
+
+
 ## Spawns an explosion (0x43cb2c): the global model 0 (`EXPLODE`), whose animated texture plays
-## once, one frame per tick, pitched towards the camera.
-func spawn_explosion(arena_name: String, center: Vector3, scale: float, yaw := 0.0) -> MDKObject:
+## once, one frame per tick, pitched towards the camera `lift` units above it unless the camera is
+## close (within 5 units across and 8 up or down).
+func spawn_explosion(arena_name: String, center: Vector3, scale: float, yaw := 0.0, lift := 3.0) -> MDKObject:
 	var model_name: String = level.cmi.model_offsets.keys()[0] if not level.cmi.model_offsets.is_empty() else ""
 	var effect := spawn(get_arena_state(arena_name).controller, model_name, center, yaw, -1, 0, false)
 	if not effect:
@@ -828,7 +856,9 @@ func spawn_explosion(arena_name: String, center: Vector3, scale: float, yaw := 0
 		var eye := to_mdk(camera.global_position)
 		var horizontal := Vector2(eye.x - center.x, eye.y - center.y).length()
 		effect.yaw = fposmod(rad_to_deg(atan2(eye.y - center.y, eye.x - center.x)), 360.0) if yaw == 0.0 else yaw
-		effect.pitch = rad_to_deg(atan2(eye.z + 5.0 - center.z, horizontal))
+		var rise := eye.z + lift - center.z
+		if horizontal > EXPLOSION_NEAR or absf(rise) > EXPLOSION_NEAR_HEIGHT:
+			effect.pitch = rad_to_deg(atan2(rise, horizontal))
 	effect.set_texture_frame(0)
 	effect.update_transform()
 	return effect
@@ -891,9 +921,30 @@ func fire_chain_gun() -> void:
 	var direction := Vector2.from_angle(deg_to_rad(target_yaw)) * CHAIN_GUN_WALL_REACH
 	var hit := raycast(origin, origin + Vector3(direction.x, direction.y, 0.0))
 	if not hit.is_empty():
-		hit_group_at(hit, damage, HIT_CHAIN_GUN, -2 if super_gun else -1)
-		spark(to_mdk(hit.position), 1)
+		var reacted := hit_group_at(hit, damage, HIT_CHAIN_GUN, -2 if super_gun else -1) & 1
+		var back := Vector3(direction.x, direction.y, 0.0).normalized()
+		spark(to_mdk(hit.position) - back, 1, "", Spark.GROUP if reacted else Spark.HARD)
 
+
+## Sparks (0x41e8f4): on objects (green, the original's blue without its gore option), on
+## indestructible objects and walls (grey, half as fast), on groups that react to the hit
+## (orange), and fire (explosions without a break-up model, the nuke).
+enum Spark { FLESH, HARD, GROUP, FIRE }
+## Palette colours `base, range` of each kind.
+const SPARK_COLOURS := [Vector2i(3, 3), Vector2i(0x25, -16), Vector2i(10, 3), Vector2i(0x30, 0x10)]
+const SPARK_SIZE := 0.5
+const SPARK_SLOW := 0.5
+const FIRE_SPARKS := 16
+## Object explosions: the white flash (`1000 / distance`, up to 150), the slime drops (scale
+## 5–6.6), the pitch towards the camera 5 units above it (3 for other explosions) unless it's
+## within 5 units across and 8 up or down.
+const EXPLOSION_FLASH := 1000.0
+const EXPLOSION_FLASH_MAX := 150.0
+const GORE_DROPS := 32
+const GORE_SCALE := 5.0
+const EXPLOSION_LIFT := 5.0
+const EXPLOSION_NEAR := 5.0
+const EXPLOSION_NEAR_HEIGHT := 8.0
 
 ## Kinds of hits on triangle groups (0x40d560), matched against their hit flags and masks.
 const HIT_SHOT := 1
@@ -1007,7 +1058,7 @@ func _chain_gun_hit(obj: MDKObject, part: int, bounds: AABB, origin: Vector3, da
 		# Sparks on the side of the box facing Kurt.
 		var toward := Vector2.from_angle(deg_to_rad(direction))
 		var point := center - Vector3(toward.x * bounds.size.x, toward.y * bounds.size.y, 0.0) * 0.5
-		spark(point, 1, obj.labels[1])
+		spark(point, 1, obj.labels[1], Spark.HARD if obj.indestructible and part < 0 else Spark.FLESH)
 		return
 	obj.health = 0
 	if super_gun:
@@ -1065,10 +1116,12 @@ func _update_bar() -> void:
 
 ## Sparks where a shot hits (`0x41e8f4`); a ricochet sound (the object's, set by opcode 26, or
 ## `RICO1`–`RICO3`) every 4 ticks.
-func spark(point: Vector3, _count: int, sound_name := "") -> void:
-	if _tick_count & 3:
-		return
-	play_sound_at(sound_name if not sound_name.is_empty() else ["RICO1", "RICO2", "RICO3"][randi() % 3], point)
+func spark(point: Vector3, count: int, sound_name := "", kind := Spark.FLESH) -> void:
+	# The ricochet every 4 frames (always for bursts).
+	if count > 1 or _tick_count & 3 == 0:
+		play_sound_at(sound_name if not sound_name.is_empty() else ["RICO1", "RICO2", "RICO3"][randi() % 3], point)
+	var colours: Vector2i = SPARK_COLOURS[kind]
+	debris.spark(current_arena, point, count, SPARK_SIZE, colours.x, colours.y, SPARK_SLOW if kind == Spark.HARD else 1.0)
 
 
 ## Starts the object's looping sound (`set_loop_sound`), stopping the previous one; an empty name
