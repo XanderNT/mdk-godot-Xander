@@ -39,6 +39,8 @@ func update_door(obj: MDKObject) -> void:
 	elif state & DOOR_CLOSING and obj.is_animation_done():
 		state = (state & 0xF0) | DOOR_CLOSED
 		_play(obj, obj.door_sounds[3])
+		# The arena behind it goes.
+		runtime.show_arena("")
 	if obj.distance_to(runtime.kurt_position) >= obj.door_distance:
 		if not state & (DOOR_CLOSING | DOOR_CLOSED | DOOR_STAYS_OPEN):
 			obj.restart_animation(runtime.get_animation(obj, obj.door_animations[1]), false)
@@ -48,6 +50,7 @@ func update_door(obj: MDKObject) -> void:
 		obj.restart_animation(runtime.get_animation(obj, obj.door_animations[0]), false)
 		state = (state & 0xF0) | DOOR_OPENING
 		_play(obj, obj.door_sounds[0])
+		_show_behind(obj)
 	obj.door_state = state
 	# Parts named `LOCK` show a locked, closed door; parts named `HC…` are hidden while it's closed.
 	var hidden := obj.hidden_parts
@@ -69,6 +72,8 @@ func update_door(obj: MDKObject) -> void:
 
 ## Sets up a new door (`spawn_connector`): masks of its `LOCK` and `HC…` parts.
 func setup_door(obj: MDKObject) -> void:
+	# New doors are closed (0x45cdec, spawn flag 1); starting mid-way they'd close and hide the arena behind.
+	obj.door_state = DOOR_CLOSED
 	obj.lock_parts = 0
 	obj.hatch_parts = 0
 	if not obj.model:
@@ -115,6 +120,15 @@ func update_pickup(obj: MDKObject) -> void:
 			obj.attached = null
 	if obj.type_name not in ["SW_H150", "SW_SEAL", "SW_SBONE"]:
 		obj.yaw = fposmod(obj.yaw + dt * PICKUP_TURN_SPEED, 360.0)
+
+
+## An opening door shows the arena behind it (0x43cc68): its other side, or its own arena, whichever
+## is neither Kurt's nor already the active second arena.
+func _show_behind(obj: MDKObject) -> void:
+	for side: String in [obj.connects, obj.arena]:
+		if not side.is_empty() and side != runtime.current_arena and not (runtime.second_active and side == runtime.second_arena):
+			runtime.show_arena(side)
+			return
 
 
 func _play(obj: MDKObject, sound_name: String) -> void:
