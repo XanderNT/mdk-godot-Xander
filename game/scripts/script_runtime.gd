@@ -390,7 +390,10 @@ func _tick() -> void:
 		town_ticks -= 1
 		if town_ticks == 0:
 			_flatten_town()
+	# Kurt only goes into an arena connected to his (0x41c550); a teleport puts him anywhere.
 	var arena_name := level.get_arena_at(kurt.global_position)
+	if not current_arena.is_empty() and not level.connects(current_arena, arena_name):
+		arena_name = current_arena
 	if not arena_name.is_empty() and arena_name != current_arena:
 		# Crossing into another arena: the one left stays as the active second arena.
 		if not current_arena.is_empty():

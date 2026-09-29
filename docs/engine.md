@@ -254,7 +254,9 @@ of a transition are drawn and solid. Arenas that no connection leads to and that
 arena can only be reached by a teleport; some are never used, and level 7's `DANT_8` (flat colours
 and `GLASS3`) lies over the start of `DANT_1`. The port keeps every arena loaded, but hides these
 and makes them not solid until a teleport takes Kurt there, and picks Kurt's arena from the
-smallest arena bounds that contain him; it draws only Kurt's arena and the second one (see
+smallest arena bounds that contain him, among the arenas connected to his (connection records
+paired by id), so a teleport into a room that overlaps another keeps him there; it draws only
+Kurt's arena and the second one (see
 [The second arena](#the-second-arena)).
 
 ### The second arena

@@ -3,6 +3,8 @@ class_name Level
 extends Node3D
 
 const SKY_SHADER := preload("res://mdk/shaders/sky.gdshader")
+## DTI records of connections between arenas (portals, in pairs).
+const CONNECTION := 6
 ## Triangle flags changed by scripts (`group_set_state`): hidden, and not solid.
 const TRIANGLE_HIDDEN := 0x10
 const TRIANGLE_NOT_SOLID := 0x20
@@ -41,6 +43,8 @@ var _arenas := {}
 ## seen unless a script teleports Kurt there. Some overlap the playable arenas (level 7's `DANT_8`,
 ## flat colours and glass, covers the start of `DANT_1`), so they're hidden and not solid.
 var _unreachable := {}
+## The arenas each arena connects to: DTI records of type 6 come in pairs with the same id.
+var _connections := {}
 var _resolvers := {}
 ## Triangles torn off at the end of the level, per arena (triangle → true).
 var _hidden_triangles := {}
@@ -64,8 +68,9 @@ func load_level(p_number: int) -> void:
 
 	for i in dti.arenas.size():
 		var entry: Dictionary = dti.arenas[i]
-		if i != dti.start_arena and not entry.records.any(func(record: Dictionary) -> bool: return record.type == 6):
+		if i != dti.start_arena and not entry.records.any(func(record: Dictionary) -> bool: return record.type == CONNECTION):
 			_unreachable[entry.name] = true
+	_find_connections()
 
 	var arenas: Array[MDKArena] = []
 	for arena_name: String in mto.get_arena_names():
@@ -248,6 +253,29 @@ func enter_arena(arena_name: String) -> void:
 		var root: Node3D = get_node(arena_name)
 		root.visible = true
 		root.process_mode = Node.PROCESS_MODE_INHERIT
+
+
+## Pairs the connection records (type 6) of the arenas by their id.
+func _find_connections() -> void:
+	var by_id := {}
+	for entry in dti.arenas:
+		_connections[entry.name] = []
+		for record: Dictionary in entry.records:
+			if record.type != CONNECTION:
+				continue
+			if not by_id.has(record.id):
+				by_id[record.id] = []
+			by_id[record.id].push_back(entry.name)
+	for names: Array in by_id.values():
+		for a: String in names:
+			for b: String in names:
+				if a != b and b not in _connections[a]:
+					_connections[a].push_back(b)
+
+
+## Whether a connection leads from one arena to the other.
+func connects(from: String, to: String) -> bool:
+	return to in _connections.get(from, [])
 
 
 ## Draws only these arenas (Kurt's and the second, see `MDKScriptRuntime`); the others stay solid.
