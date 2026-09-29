@@ -256,10 +256,137 @@ and `GLASS3`) lies over the start of `DANT_1`. The port keeps every arena loaded
 and makes them not solid until a teleport takes Kurt there, and picks Kurt's arena from the
 smallest arena bounds that contain him.
 
+### The second arena
+
+#### Globals ✅
+
+| Address | Meaning |
+| --- | --- |
+| 0x573a0c | Kurt's arena |
+| 0x573a68 | second arena ("neighbour"): the one behind an open door, the one Kurt just left, or one being preloaded |
+| 0x573a6c | second arena **active** (drawn, updated, solid for Kurt). 0 = only loaded/preloaded |
+| 0x573b00 | an MTO arena is being streamed (`arena_switch` sets it, `arena_load_step` 0x41983c clears it when the last 32 KiB chunk is in). Not a "disable" flag: while set the second arena's BSP may not be there |
+| 0x573b04 / 0x573b2c | arena sounds / arena music still loading (0x419ac0 / 0x4193a4 one step per frame) |
+| 0x573b24 / 0x573b28 | Kurt's / second arena of the previous frame (for deactivation) |
+| `_g_current_arena` | the one MTO arena whose geometry is resident (arenas, flag `arena+0x44` bit 1). Corridors (bit 1 clear) live in `LEVELnS.SNI` and are loaded separately (0x431914 / freed 0x431ad8) |
+| `arena+0x44` bit 4 | DTI objects already spawned (0x43bd38) |
+
+Only one MTO arena is resident at a time (`arena_switch` 0x41970c frees the previous one's `+0x24`/`+0x40`), so the
+pair Kurt/second is in practice arena + corridor. ❓ (two MTO arenas as a pair would evict one).
+
+#### Primitives ✅
+
+- **`arena_load` 0x419d00(a)**: loads `a` (not active by itself): corridor → `arena_activate` 0x4194e4; MTO
+  arena → `arena_switch` (starts streaming, 0x573b00 = 1). Starts loading its music if it has any (`+0x44` bit 2,
+  0x4192c4); if `a` is Kurt's arena switches the music (0x419158). Registers textures (0x42325c). Then for each
+  type-6 connection of `a` to an arena that is neither Kurt's nor the **active** second: every live door
+  (flag 0x100000) of that arena whose `obj+0x60` or `obj+0x302` is `a` is moved into `a` (`obj+0x2bc = a`, 0x43ca00;
+  the door's `+0x302` becomes its old arena, yaw += 180).
+- **`BSPShow` 0x41a11c(a)** (opcode 100 `arena_show` via 0x41a1ac; `NONE` → a = 0):
+  - a = 0: `arena_clear` 0x419f78: 0x573a68 = 0, 0x573a6c = 0 (and `_g_current_arena` = 0 if it was the second
+    one still streaming).
+  - a = Kurt's arena: `arena_load(a)`; 0x573a68 unchanged.
+  - a ≠ second: 0x573a68 = a, `arena_load(a)`.
+  - then **blocks** until streaming, sounds and music are loaded (loops on 0x573b00/b04/b2c), sets
+    **0x573a6c = 1** (always, also when a is Kurt's arena: whatever second arena is set becomes active), and the
+    first time (`+0x44` bit 4 clear) spawns the DTI objects of `a` (0x43bd38, see below).
+- **`arena_set_neighbour` 0x41a2d0** (opcode 223): if the arena ≠ 0x573a68: 0x573a68 = it, `arena_load` (streams in
+  the background, one chunk per frame from `game_frame`), **0x573a6c = 0**. `NONE`/not found → nothing.
+
+#### 1. When it is set / cleared ✅
+
+| Event | Code | 0x573a68 | 0x573a6c |
+| --- | --- | --- | --- |
+| Door starts **opening** (Kurt closer than `obj+0x30e`, state not open/opening/locked) | 0x43cc68 | `BSPShow(side)`: `obj+0x302` if it is neither Kurt's nor the active second; else `obj+0x60` if that is neither; else nothing | 1 |
+| Door **closing ends** (state 4 → 8, animation done) | 0x43cc68 | `BSPShow(NONE)` → 0 | 0 |
+| Door opening ends / closing starts | 0x43cc68 | unchanged | unchanged |
+| Kurt **crosses a connection** (type 6, 0x41c550 on Kurt's previous/current position) | `game_frame` 0x41d4d8 | = arena he left; Kurt's = new one; `BSPShow(new)` | 1 |
+| Kurt's XY inside (or crossing) a **type 1** record box of his arena (every frame) | 0x41bf1c | id = −1 → cleared; else `BSPShow(arenas[id])` | 0 / 1 |
+| Same, **type 3** record | 0x41bf1c | id = −1 → cleared; else if different: = arenas[id], `arena_load` (async) | 0 if changed, else unchanged |
+| Opcode 100 `arena_show` | 0x41a1ac | `BSPShow` | 1 (0 for NONE) |
+| Opcode 223 `arena_set_neighbour` | 0x41a2d0 | = arena (async load) | 0 |
+| **Teleport** into an MTO arena (`+0x44` bit 1) | 0x41bce4 | cleared, then `BSPShow(Kurt's)` | 0 |
+| **Teleport** into a corridor not loaded | 0x41bce4 | = the last arena (highest index) with a type-6 connection to it (`arena_load`); other loaded corridors not connected to `_g_current_arena` are freed; then `BSPShow(Kurt's)` | 1 |
+| Teleport into a loaded corridor | 0x41bce4 | unchanged; `BSPShow(Kurt's)` | 1 (if set) |
+| Level start (0x41ba68, flag 2 clear) | 0x41ba68 | `BSPShow(Kurt's)`, then `arena_load(second)` if set | 1 |
+| Load game | 0x42fb18 | restored from the save (index, −1 = none, 0x42ebc8); `BSPShow(Kurt's)`, `BSPShow(second)` if set | 1 |
+
+- Type 1/3 records (corridors) are trigger rectangles: `x, y` (`+0xc`, `+0x10`) to `x2, y2` (`+0x18`, `+0x1c`), no
+  z test; `id` = arena index. Crossing condition = inside on both axes or the segment previous → current position
+  crosses an edge. ✅
+- ❓ Nothing found that resets 0x573a68 on level load (`level_load` reallocates `_g_arenas`); presumably the level's
+  start state or a script sets it.
+- ❓ Whether 0x573a6c itself is saved: irrelevant, loading forces 1 through `BSPShow`.
+
+Typical sequence: door opens → `BSPShow(other side)` (sync load, active, first-time spawn) → Kurt walks through
+→ connection crossing swaps the pair (left arena stays active second) → a type 1/3 trigger in the corridor or the
+next door closing (`BSPShow(NONE)`) clears it.
+
+#### 2. What an active second arena changes ✅
+
+Frame order in `game_frame` 0x41d4d8: objects of Kurt's arena (0x43c7dc) → free dead ones (0x45fc68) →
+**if 0x573a6c && 0x573a68: objects of the second arena**, free its dead ones → Kurt's arena script (`arena+0x118`)
+→ **if 0x573a6c && 0x573a68: second arena's script** → pending teleport (0x41bce4) → connection crossing →
+triggers 0x41bf1c → camera → draw → triangle-group update 0x40d46c (Kurt's, second if 0x573a6c) → … →
+deactivation (end of frame).
+
+| System | Kurt's | Second when 0x573a6c = 1 | Second when 0x573a6c = 0 (preloaded) | Other arenas |
+| --- | --- | --- | --- | --- |
+| Objects updated (0x43c7dc) incl. doors | yes | yes | no | no |
+| Arena script | yes | yes | no | no |
+| Drawn (`arena_build_drawlist` 0x4185f0, geometry + its objects) via 0x41e344 | yes | yes | no | no |
+| Effects (`arena+0x5c`, 0x405ea0), texture scrolling (0x414230) | yes | yes (not while 0x573b00) | yes (not while 0x573b00) | no |
+| Triangle groups (0x40d46c) | yes | yes | no | no |
+| Kurt's BSP collision (`damp_collide_move` 0x465e34) | yes | yes (not while 0x573b00, not on the snowboard 0x573c30) | no | no |
+| Kurt vs objects | Kurt's arena objects only | no | no | no |
+| Updrafts (`damp_gravity`, 0x46360c), ledge grab, camera clearance | yes | yes if 0x573b00 = 0 | same | no |
+| Segment/ray tests (0x421680): `if_sees_kurt` 0x4605d0, 0x460518, `if_bomb_visible`, chain gun 0x41a304 / 0x41ab2c, Kurt's projectiles 0x462708, blasts 0x463a94, air strike, effects 0x407e2c | yes | yes if 0x573b00 = 0 | same (**not** gated by 0x573a6c) | no |
+| Objects hit by chain gun / projectiles / blasts (0x41a304, 0x462708, 0x463a94, 0x46428c) | yes | yes | no | no |
+| Object BSP moves (0x45fec4) | own arena; objects with flag 0x80000 also test Kurt's (or the second if they are in Kurt's) and switch arena on hit | | | |
+| End-level break-up (0x40a9e0) | yes | yes | no | no |
+| Loop sounds / models | loaded | loaded | **loaded** (activation covers both slots) | unloaded |
+
+- Draw order: second first, then Kurt's; swapped (`0x490db4` = 1) when the camera is behind a connection into the
+  second arena (`camera_update` 0x4174d0 runs 0x41c550 on the camera position). No portal or door clipping found: the whole arena is
+  submitted (per-triangle projection/culling in `arena_build_drawlist`). ❓ finer culling not checked.
+- While 0x573b00 = 1 (streaming) the second arena is not drawn and has no effects (`game_frame` passes 0).
+- Music: `arena_load` of either slot preloads that arena's music; it is only started if the arena is Kurt's
+  (see sound.md "Arena music").
+
+#### 3. Activation / deactivation ✅
+
+- **Activation** `arena_activate` 0x4194e4 (after a corridor load, or when streaming + sounds of an MTO arena
+  finish, via 0x419ac0): parses the streamed world if needed, inits its groups (0x40d46c(a,1)), registers textures
+  of Kurt's and second, palette 64–175, then **0x43f8e0 on every live object of Kurt's arena and of 0x573a68
+  (whatever 0x573a6c)**: re-creates its model instance (and replays its current animation frame), restarts its
+  loop sound (`obj+0x15c` → `obj+0x158`).
+- **First show** 0x43bd38 (only from `BSPShow`, arena bit 4 clear): DTI type 2 records → aliens (model
+  `+0x4` hi word, instance lo word, script `"%s$%s_%d"`), type 4 → static objects (flags |= 0x2008a0, `obj+8` = 1,
+  script `"%s$%s"`, `SW_DUMMY` part hidden); skipped when a live object of that type/instance already sits at that
+  position. So aliens behind a door exist from the moment the door starts opening, before Kurt enters.
+- **Deactivation** at the end of `game_frame`: an arena that was Kurt's or the second last frame (0x573b24/b28)
+  and is neither now → 0x419cb0: frees its effects, and 0x43f800 on each live object: clears the aliens' target
+  if it was it; projectiles/effects (flags 0x1000/0x4000) are destroyed (the Interesting/other bomb pointers
+  0x573c20/0x573c24 cleared); others: loop sound stopped, model instance freed (state kept, re-created on
+  activation). Setting 0x573a6c = 0 alone does **not** deactivate (objects stay loaded, just frozen and undrawn).
+- Objects moving into an arena (0x43ca00) are loaded if it is Kurt's or the second (any 0x573a6c), else unloaded.
+- Object pool full (0x45fd4c): recycles objects from arenas that are neither Kurt's nor the second.
+
+#### In the port
+
+`MDKScriptRuntime` keeps `second_arena` / `second_active`: `show_arena()` (`BSPShow`: opcode 100,
+doors starting to open, crossing into another arena, trigger records of type 1, the start and
+teleports) and `preload_arena()` (opcode 223, type 3); a door that ends closing clears it. The
+objects and the script of the active second arena run, and its DTI aliens appear when it's first
+shown (so behind a door as it opens). Not done yet: every reachable arena is still drawn and solid
+and rays hit them all; arenas aren't deactivated (loop sounds keep playing); type 4 DTI records
+(static objects) aren't spawned; doors aren't moved into a newly loaded arena.
+
 ### Doors (0x43cc68)
 
 Doors are **connectors** between an arena and a corridor, created by `spawn_connector` (opcode 149)
-in the scripts of both: the second call finds the existing door and moves it into its arena. The
+in the scripts of both: the second call finds the existing door and moves it into its arena. A new
+door starts closed (state 8) with an opening distance of 20 (`object_spawn` 0x45cdec, spawn flag 1). The
 door's state (`obj+0x312`: 1 open, 2 opening, 4 closing, 8 closed; higher bits set by opcode 152:
 0x10 not solid while open, 0x20 stays open, 0x40 locked, 0x100 lock hidden) changes every frame:
 

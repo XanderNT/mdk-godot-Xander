@@ -250,6 +250,19 @@ func enter_arena(arena_name: String) -> void:
 		root.process_mode = Node.PROCESS_MODE_INHERIT
 
 
+## The DTI records of an arena (see `MDKDti`).
+func get_arena_records(arena_name: String) -> Array:
+	for entry in dti.arenas:
+		if entry.name == arena_name:
+			return entry.records
+	return []
+
+
+## The name of the arena with a DTI index, or an empty string.
+func get_arena_name(index: int) -> String:
+	return dti.arenas[index].name if index >= 0 and index < dti.arenas.size() else ""
+
+
 ## Returns the name of the (smallest) arena whose bounds contain `position`, or an empty string.
 ## Arenas Kurt can't get to are left out.
 func get_arena_at(position: Vector3) -> String:

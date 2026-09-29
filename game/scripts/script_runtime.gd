@@ -125,6 +125,10 @@ signal level_ended(game_over: bool)
 signal strike_scene(active: bool)
 var town_ticks := 0
 var current_arena := ""
+## The second arena (`0x573a68`): behind an open door, the one Kurt just left, or one loaded ahead;
+## when active (`0x573a6c`) its objects and script run too. See docs/engine.md, "The second arena".
+var second_arena := ""
+var second_active := false
 var objects: Array[MDKObject] = []
 
 var _arenas := {}
@@ -244,9 +248,72 @@ func is_sound_playing(sound_name: String) -> bool:
 func teleport_kurt(arena_name: String, mdk_position: Vector3, yaw: float) -> void:
 	if not arena_name.is_empty():
 		level.enter_arena(arena_name)
+		# A teleport leaves no second arena (0x41bce4).
+		second_arena = ""
+		second_active = false
+		current_arena = arena_name
+		show_arena(arena_name)
 	kurt.teleport(MDKMeshBuilder.to_godot(mdk_position), deg_to_rad(yaw - 90.0))
 	if arena_name.is_empty():
 		kurt.white_flash = maxf(kurt.white_flash, 255.0)
+
+
+## Shows an arena (`BSPShow` 0x41a11c, opcode 100): it becomes the active second arena (unless
+## it's Kurt's), and the first time its DTI aliens appear. An empty name or `NONE` clears it.
+func show_arena(arena_name: String) -> void:
+	if arena_name.is_empty() or arena_name == "NONE":
+		second_arena = ""
+		second_active = false
+		return
+	if arena_name != current_arena:
+		second_arena = arena_name
+	second_active = true
+	var state := get_arena_state(arena_name)
+	if not state.started:
+		state.started = true
+		_spawn_dti_aliens(arena_name)
+
+
+## Loads an arena ahead (`arena_set_neighbour` 0x41a2d0, opcode 223): the second arena, not active.
+func preload_arena(arena_name: String) -> void:
+	if arena_name.is_empty() or arena_name == "NONE" or arena_name == second_arena:
+		return
+	second_arena = arena_name
+	second_active = false
+
+
+## Whether an arena's objects run: Kurt's, and the second one when it's active.
+func is_live_arena(arena_name: String) -> bool:
+	return arena_name == current_arena or (second_active and arena_name == second_arena)
+
+
+## The trigger boxes of Kurt's arena (DTI records of types 1 and 3, 0x41bf1c): walking into one
+## shows (1) or loads ahead (3) the arena of its id; an id of −1 clears the second arena.
+func _check_triggers() -> void:
+	var from := Vector2(_previous_kurt_position.x, _previous_kurt_position.y)
+	var to := Vector2(kurt_position.x, kurt_position.y)
+	for record: Dictionary in level.get_arena_records(current_arena):
+		if record.type != TRIGGER_SHOW and record.type != TRIGGER_LOAD:
+			continue
+		var box := Rect2(Vector2(record.position.x, record.position.y), Vector2.ZERO).expand(Vector2(record.box_end.x, record.box_end.y))
+		if not box.has_point(to) and not _crosses(box, from, to):
+			continue
+		var arena_name := level.get_arena_name(record.id) if record.id >= 0 else ""
+		if record.type == TRIGGER_SHOW:
+			show_arena(arena_name)
+		elif arena_name.is_empty():
+			show_arena("")
+		else:
+			preload_arena(arena_name)
+
+
+## Whether a move crosses a box's edge (XY).
+static func _crosses(box: Rect2, from: Vector2, to: Vector2) -> bool:
+	var corners := [box.position, Vector2(box.end.x, box.position.y), box.end, Vector2(box.position.x, box.end.y)]
+	for i in 4:
+		if Geometry2D.segment_intersects_segment(from, to, corners[i], corners[(i + 1) % 4]) != null:
+			return true
+	return false
 
 
 ## Converts a Godot position to MDK coordinates.
@@ -296,11 +363,12 @@ func _tick() -> void:
 			_flatten_town()
 	var arena_name := level.get_arena_at(kurt.global_position)
 	if not arena_name.is_empty() and arena_name != current_arena:
+		# Crossing into another arena: the one left stays as the active second arena.
+		if not current_arena.is_empty():
+			second_arena = current_arena
 		current_arena = arena_name
-		var state := get_arena_state(arena_name)
-		if not state.started:
-			state.started = true
-			_spawn_dti_aliens(arena_name)
+		show_arena(arena_name)
+	_check_triggers()
 	# Kurt moves and takes pickups, then fires, then the objects run (`game_frame`).
 	if _tick_count > 0:
 		collect_pickups()
@@ -310,6 +378,8 @@ func _tick() -> void:
 		fire_chain_gun()
 	if not current_arena.is_empty():
 		vm.run(get_arena_state(current_arena).controller)
+	if second_active and not second_arena.is_empty():
+		vm.run(get_arena_state(second_arena).controller)
 	items.update_twisters()
 	effects.update(1.0)
 	debris.update(1.0)
@@ -318,10 +388,9 @@ func _tick() -> void:
 	if end_level:
 		end_level.update(1.0)
 	_update_sniper_target()
-	# Only the objects of Kurt's arena are updated (0x43c7dc; the original also updates the arena
-	# seen through an open door).
+	# Only the objects of Kurt's arena and of the active second arena are updated (0x43c7dc).
 	for obj in objects.duplicate():
-		if obj.dead or obj.arena != current_arena:
+		if obj.dead or not is_live_arena(obj.arena):
 			continue
 		if obj.flags & MDKObject.FLAG_DOOR:
 			behaviors.update_door(obj)
@@ -937,6 +1006,10 @@ func fire_chain_gun() -> void:
 		var back := Vector3(direction.x, direction.y, 0.0).normalized()
 		spark(to_mdk(hit.position) - back, 1, "", Spark.GROUP if reacted else Spark.HARD)
 
+
+## DTI trigger records: show an arena, load one ahead (0x41bf1c).
+const TRIGGER_SHOW := 1
+const TRIGGER_LOAD := 3
 
 ## Sparks (0x41e8f4): on objects (green, the original's blue without its gore option), on
 ## indestructible objects and walls (grey, half as fast), on groups that react to the hit

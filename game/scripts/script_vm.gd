@@ -256,8 +256,8 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 			obj.door_state = (obj.door_state & 0xF) | (o[0] & ~0xF)
 		153:  # door_set_param: distance at which the door opens
 			obj.door_distance = o[0]
-		100:  # arena_show (every arena is always drawn in the port)
-			pass
+		100:  # arena_show
+			runtime.show_arena(o[0])
 		149:  # spawn_connector
 			runtime.spawn_connector(obj, o[5], Vector3(o[0], o[1], o[2]), o[3], o[4], o[6], o[7])
 		111:  # set_instance
@@ -1099,8 +1099,8 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 				obj.gosub_returns.clear()
 				obj.gosub_restarts.clear()
 				return YIELD
-		223:  # arena_set_neighbour (every arena is always there in the port)
-			pass
+		223:  # arena_set_neighbour
+			runtime.preload_arena(o[0])
 		239:  # set_27c (not identified)
 			pass
 		_:
