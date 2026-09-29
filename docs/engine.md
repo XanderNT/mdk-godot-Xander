@@ -383,10 +383,10 @@ teleports) and `preload_arena()` (opcode 223, type 3); a door that ends closing 
 objects and the script of the active second arena run, and its DTI aliens appear when it's first
 shown (so behind a door as it opens). Only Kurt's arena and the active second one are drawn, with
 their objects; an arena in neither slot any more stops its objects' loop sounds, which start again
-when it comes back. Not done yet: every reachable arena is still solid for Kurt (the port picks
-Kurt's arena by its box, not by crossing connections, so this is safer) and rays hit them all;
-projectiles and effects of an arena put away aren't destroyed; doors aren't moved into a newly
-loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
+when it comes back, and Kurt's thrown items there go. Rays (`raycast`) stop only on Kurt's arena
+and the second one. Not done: every reachable arena is still solid for Kurt (the port picks his
+arena by its box among the connected ones, not by crossing the connections, so this is safer);
+doors aren't moved into a newly loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
 with the aliens, with flags 0x2008a0 and 1 health.
 
 ### Doors (0x43cc68)

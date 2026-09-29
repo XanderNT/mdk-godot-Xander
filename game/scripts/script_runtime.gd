@@ -286,7 +286,8 @@ func preload_arena(arena_name: String) -> void:
 
 
 ## Only Kurt's arena and the active second one are drawn, with their objects (0x41e344). An
-## arena in neither slot any more is put away (0x419cb0: its objects' loop sounds stop), and
+## arena in neither slot any more is put away (0x419cb0: its objects' loop sounds stop, Kurt's
+## thrown items and effects there go), and
 ## started again when it comes back (`arena_activate`, 0x43f8e0).
 func _update_arenas() -> void:
 	var loaded: Array[String] = [current_arena]
@@ -297,8 +298,13 @@ func _update_arenas() -> void:
 		drawn.push_back(second_arena)
 
 	if loaded != _loaded_arenas:
-		for obj in objects:
+		for obj in objects.duplicate():
 			if obj.arena in _loaded_arenas and obj.arena not in loaded:
+				# Kurt's thrown items and effects there go (0x43f800).
+				if obj.flags & (MDKItems.FLAG_THROWN | MDKItems.FLAG_ACTIVE):
+					items.forget(obj)
+					remove(obj)
+					continue
 				mixer.stop_voice(obj.loop_sound)
 				obj.loop_sound = null
 			elif obj.arena in loaded and obj.arena not in _loaded_arenas and not obj.loop_sound_name.is_empty():
@@ -1048,6 +1054,9 @@ func fire_chain_gun() -> void:
 		spark(to_mdk(hit.position) - back, 1, "", Spark.GROUP if reacted else Spark.HARD)
 
 
+## Rays pass through at most this many surfaces of other arenas.
+const RAY_ARENAS_MAX := 16
+
 ## DTI records of aliens and of static objects (pickups: flags 0x2008a0, 0x43bd38).
 const DTI_ALIEN := 2
 const DTI_STATIC := 4
@@ -1568,7 +1577,21 @@ func get_arena_floor(arena_name: String) -> float:
 ## (Godot coordinates), or an empty dictionary.
 func raycast(from: Vector3, to: Vector3) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(MDKMeshBuilder.to_godot(from), MDKMeshBuilder.to_godot(to), LEVEL_LAYER)
-	return get_world_3d().direct_space_state.intersect_ray(query)
+	var space := get_world_3d().direct_space_state
+	var exclude: Array[RID] = []
+
+	# Only Kurt's arena and the second one (loaded, active or not) stop rays (0x421680); the
+	# others are passed through.
+	for i in RAY_ARENAS_MAX:
+		query.exclude = exclude
+		var hit := space.intersect_ray(query)
+		if hit.is_empty() or current_arena.is_empty():
+			return hit
+		var arena_name: String = hit.collider.get_meta(&"arena", "")
+		if arena_name.is_empty() or arena_name == current_arena or arena_name == second_arena:
+			return hit
+		exclude.push_back(hit.rid)
+	return {}
 
 
 ## Destination near the target (`move_near_target`): the target position offset by `forward` and

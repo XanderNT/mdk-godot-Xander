@@ -8,6 +8,8 @@ const MODELS := ["", "SW_DUMMY", "SW_INTER", "SW_TWIST", "SW_THUMP", "SW_HBOMB",
 		"SW_SEAL", "SW_SBONE"]
 ## A thrown item: Kurt's effect (0x1000), not a target, not solid for Kurt, gravity and collisions.
 const THROWN_FLAGS := 0x818a6
+## Kurt's effects: his thrown items (`obj+0x149` bit 0x10).
+const FLAG_THROWN := 0x1000
 ## Flag of an item that has landed and does its thing (`obj+0x149` bit 0x40).
 const FLAG_ACTIVE := 0x4000
 ## Thrown items fly this fast (grenades 3 times faster), 15 units/s upwards.
@@ -33,6 +35,14 @@ var bomb: MDKObject
 var decoy: MDKObject
 ## Twisters of tornados.
 var twisters: Array[MDKTwister] = []
+
+
+## An item that goes before it's done (its arena put away): the bomb or the decoy isn't out any more.
+func forget(obj: MDKObject) -> void:
+	if obj == bomb:
+		bomb = null
+	if obj == decoy:
+		decoy = null
 var _animations := {}
 
 
