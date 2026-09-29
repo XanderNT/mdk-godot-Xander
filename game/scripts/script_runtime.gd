@@ -787,12 +787,20 @@ func _spawn_dti_aliens(arena_name: String) -> void:
 	for entry in level.dti.arenas:
 		if entry.name != arena_name:
 			continue
+		var controller := get_arena_state(arena_name).controller
 		for record: Dictionary in entry.records:
-			if record.type != 2:
+			if record.type == DTI_ALIEN:
+				var key := "%s$%s_%d" % [arena_name, record.name, record.id]
+				spawn(controller, record.name, record.position, record.angle, record.id, level.cmi.alien_scripts.get(key, 0), false)
 				continue
-			var key := "%s$%s_%d" % [arena_name, record.name, record.id]
-			var controller := get_arena_state(arena_name).controller
-			spawn(controller, record.name, record.position, record.angle, record.id, level.cmi.alien_scripts.get(key, 0), false)
+			if record.type != DTI_STATIC:
+				continue
+			# Static objects (0x43bd38): the pickups of level 8's `GUNT_9`.
+			var script: int = level.cmi.alien_scripts.get("%s$%s" % [arena_name, record.name], 0)
+			var obj := spawn(controller, record.name, record.position, record.angle, -1, script, false)
+			if obj:
+				obj.flags |= DTI_STATIC_FLAGS
+				obj.health = 1
 
 
 ## Spawns an object of type `type_name` in `parent`'s arena. Returns `null` if the type is unknown.
@@ -1039,6 +1047,11 @@ func fire_chain_gun() -> void:
 		var back := Vector3(direction.x, direction.y, 0.0).normalized()
 		spark(to_mdk(hit.position) - back, 1, "", Spark.GROUP if reacted else Spark.HARD)
 
+
+## DTI records of aliens and of static objects (pickups: flags 0x2008a0, 0x43bd38).
+const DTI_ALIEN := 2
+const DTI_STATIC := 4
+const DTI_STATIC_FLAGS := MDKObject.FLAG_PICKUP | MDKObject.FLAG_NOT_SOLID_2 | MDKObject.FLAG_NO_BANKING | MDKObject.FLAG_NOT_TARGET
 
 ## DTI trigger records: show an arena, load one ahead (0x41bf1c).
 const TRIGGER_SHOW := 1

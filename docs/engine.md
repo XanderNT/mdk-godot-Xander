@@ -385,8 +385,9 @@ shown (so behind a door as it opens). Only Kurt's arena and the active second on
 their objects; an arena in neither slot any more stops its objects' loop sounds, which start again
 when it comes back. Not done yet: every reachable arena is still solid for Kurt (the port picks
 Kurt's arena by its box, not by crossing connections, so this is safer) and rays hit them all;
-projectiles and effects of an arena put away aren't destroyed; type 4 DTI records (static objects)
-aren't spawned; doors aren't moved into a newly loaded arena.
+projectiles and effects of an arena put away aren't destroyed; doors aren't moved into a newly
+loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
+with the aliens, with flags 0x2008a0 and 1 health.
 
 ### Doors (0x43cc68)
 
@@ -856,7 +857,8 @@ Callers:
 | Kurt's rounds on the arena (0x462eb4) | hit point | 1 / 3 | 2 if the group reacted (1 spark), else 1 (3 sparks) |
 | Chasing aliens' hitscan (0x45ec18, from command 6 0x45e448) | on Kurt / arena hit | 1 | 0 on Kurt (+ `hurt_kurt 1` 0x46a498) / 1 on the arena |
 
-**Chasing aliens' hitscan** ❓ (not in the port): every frame the chaser faces its target within 30°,
+**Chasing aliens' hitscan** (unused: command 6 is only set by opcode 6 `move_to_target`, which no
+level's script uses; not in the port): every frame the chaser faces its target within 30°,
 it casts a ray 150 units along `(0.866 cos yaw, 0.866 sin yaw, −0.5)` (30° down). If Kurt's position
 projects on it at `0 < t < 150`, horizontally within √3 of the ray and `Kurt z − 0.5 < z < Kurt z + 5`,
 Kurt is hit; otherwise the ray is tested against the arena (then the neighbour arena).
@@ -954,7 +956,7 @@ every tick; sparks as flat vertex-coloured triangles, `colour = base + range × 
 trails are `MDKEffects` `TRAIL` sprites. `MDKScriptRuntime.spark()` makes the bursts (kinds
 `FLESH`, `HARD`, `GROUP`, `FIRE`; the gore option is taken as on, so flesh sparks are green), and
 `explode()` the break-up, gore drops, white flash and pitch thresholds; the nuke adds its 16 fire
-sparks. Test: `--sparks`. Not done: the chasing aliens' hitscan, fire sparks for the fans (they're
+sparks. Test: `--sparks`. Not done: fire sparks for the fans (they're
 `CPUParticles3D`), the "is the pool empty" rule of the ricochet sound.
 
 ## Shattered triangle groups (`shatter_group` 137–139, 0x40c828)
