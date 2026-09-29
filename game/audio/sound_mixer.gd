@@ -103,6 +103,15 @@ func stop(sound_name: String) -> void:
 			_free(voice)
 
 
+## Sets a voice's volume (0–0x7FFF), e.g. the `XD2`'s quieter `DUMMY` (0x4032e8).
+func set_volume(voice: Voice, volume: int) -> void:
+	if not voice or not is_instance_valid(voice.player):
+		return
+	voice.volume = volume
+	if not voice.positional:
+		voice.player.volume_db = to_db(volume)
+
+
 func stop_voice(voice: Voice) -> void:
 	if voice:
 		_free(voice)

@@ -1061,8 +1061,8 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 					and runtime.raycast(point, runtime.kurt_position + Vector3(0, 0, 4)).is_empty())
 		13:  # if_cheat_key (cheat keys aren't done)
 			return _branch(obj, ins, false)
-		171:  # if_is_573c30 (the object Kurt rides; there's none)
-			return _branch(obj, ins, false)
+		171:  # if_is_573c30: the object Kurt rides
+			return _branch(obj, ins, runtime.rides.ridden == obj)
 		77:  # debug_msg
 			pass
 		204:  # avoid_objects: turns away from an object it overlaps

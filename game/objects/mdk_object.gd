@@ -17,6 +17,8 @@ const FLAG_NOT_TARGET := 0x20
 const FLAG_ROLLING := 0x40
 const FLAG_NO_BANKING := 0x80
 const FLAG_NOT_SOLID_2 := 0x800
+## Kurt can stand on it (`set_targetable 2`), and ride it if it's rideable.
+const FLAG_STANDABLE := 0x800000
 ## Some parts take damage separately (`set_weak_parts`).
 const FLAG_WEAK_PARTS := 0x2000
 const FLAG_NO_TURNING := 0x10000
@@ -477,7 +479,9 @@ func update_ropes() -> void:
 
 
 func update_body() -> void:
-	var solid := model != null and not dead and health != 0 and not flags & (FLAG_NOT_SOLID | FLAG_NOT_SOLID_2)
+	# Kurt lands on standable objects (0x800000, `damp_gravity`) even if he passes through them.
+	var passable := flags & FLAG_NOT_SOLID or (flags & FLAG_NOT_SOLID_2 and not flags & FLAG_STANDABLE)
+	var solid := model != null and not dead and health != 0 and not passable
 	if not solid:
 		if _body and not _body_key.is_empty():
 			for shape in _body_shapes:

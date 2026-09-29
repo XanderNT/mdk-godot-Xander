@@ -335,6 +335,5 @@ Only used by scripts (never by code): `ALDIE` (level copy), `GRUNTFIRE`, `XF_AMB
 - Differences: Godot pans the 3D voices correctly (not the original's heading-dependent pan) and
   also in sniper mode; the volume settings are the buses' gains (0 mutes); the "fixed" voices
   (ricochets) keep being updated; no Doppler on 2D voices, as in the original.
-- Not done: the snowboard (`SKI`, `SKITURN`, `SKILAND`) and the `XD2` ride, which the port doesn't
-  have yet; `OPTSONG`/`OPTBUTT` in the sound
+- Not done: `OPTSONG`/`OPTBUTT` in the sound
   options; the end movie.

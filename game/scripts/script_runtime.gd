@@ -60,6 +60,7 @@ var debris: MDKDebris
 var sniper_rounds: MDKSniperRounds
 var sniper_target: MDKObject
 var air_strike: MDKAirStrike
+var rides: MDKRides
 ## The end of the level's tornado, once it started.
 var end_level: MDKEndLevel
 ## The point and direction of the last `shatter_group` (0x4d5374, 0x4d5358).
@@ -171,6 +172,7 @@ func setup(p_level: Level, p_kurt: Kurt) -> void:
 	sniper_rounds = MDKSniperRounds.new()
 	sniper_rounds.runtime = self
 	add_child(sniper_rounds)
+	rides = MDKRides.new(self)
 	air_strike = MDKAirStrike.new(self)
 	air_strike.used_up = GameState.strike_used
 	kurt.sniper_fire = func(type: int) -> bool:
@@ -259,6 +261,21 @@ func teleport_kurt(arena_name: String, mdk_position: Vector3, yaw: float) -> voi
 	kurt.teleport(MDKMeshBuilder.to_godot(mdk_position), deg_to_rad(yaw - 90.0))
 	if arena_name.is_empty():
 		kurt.white_flash = maxf(kurt.white_flash, 255.0)
+
+
+## The triangle groups of his arena that Kurt ran into this tick get a hit (0x46634e): with hit
+## flag 0x40 even no damage counts, e.g. the snowboard breaking through ice walls in level 4.
+func _kurt_touches_groups() -> void:
+	var touched := {}
+	for i in kurt.get_slide_collision_count():
+		var body := kurt.get_slide_collision(i).get_collider() as Node
+		if not body or not body.has_meta(&"group") or body.get_meta(&"arena", "") != current_arena:
+			continue
+		var group: int = body.get_meta(&"group")
+		if touched.has(group):
+			continue
+		touched[group] = true
+		hit_group(current_arena, group, 0, HIT_KURT, HIT_TYPE_KURT)
 
 
 ## Shows an arena (`BSPShow` 0x41a11c, opcode 100): it becomes the active second arena (unless
@@ -408,6 +425,8 @@ func _tick() -> void:
 		show_arena(arena_name)
 	_check_triggers()
 	_update_arenas()
+	_kurt_touches_groups()
+	rides.update()
 	# Kurt moves and takes pickups, then fires, then the objects run (`game_frame`).
 	if _tick_count > 0:
 		collect_pickups()
@@ -894,6 +913,7 @@ func _process(delta: float) -> void:
 
 
 func remove(obj: MDKObject) -> void:
+	rides.lost(obj)
 	if obj.attached and not obj.attached.dead:
 		remove(obj.attached)
 	obj.dead = true
@@ -1098,6 +1118,9 @@ const HIT_SHOT := 1
 const HIT_CHAIN_GUN := 2
 const HIT_BLAST := 3
 const HIT_OTHER_BLAST := 4
+## Kurt running into a group (`damp_collide_move` 0x46634e): kind 8, hit type −11, no damage.
+const HIT_KURT := 8
+const HIT_TYPE_KURT := -11
 
 
 ## A hit on the arena triangle that `hit` (a `raycast()` result) found; see `hit_group()`.
@@ -1529,6 +1552,13 @@ func fire(obj: MDKObject, origin: Array, bullet_name: String, script: int) -> MD
 
 
 func hurt_kurt(damage: int) -> void:
+	# Riding the `XD2`, it takes the hits (0x46a498).
+	if rides.takes_hits():
+		if rides.ridden.health < 65000:
+			rides.ridden.health -= damage
+			if rides.ridden.health < 1:
+				kill(rides.ridden)
+		return
 	kurt.hurt(damage)
 
 

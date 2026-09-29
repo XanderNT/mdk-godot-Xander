@@ -99,6 +99,10 @@ const SNIPER_FALL_SPEED := -30.0
 const CLIP_SIZE := 3
 const CLIP_DECAY := 4.0
 
+## Walking, or riding the `XD2` (0x46a840): the same walk and turn, but no strafing, jumping,
+## firing or ledges, and Kurt is hidden in it.
+enum Walk { NORMAL, RIDING }
+
 enum State { STILL, IDLE, RUN, SIDE, TURN, JUMP, RUN_JUMP, FALL, CHUTE, LAND, SHOT, RUN_FIRE, DEAD, THROW, KNOCKED,
 		SLIP, SLIDE, SLIDE_FAST, SLIDE_BRAKE, HANG }
 
@@ -228,6 +232,10 @@ var _wheel_used := false
 var _shot_ticks := 0
 var _breath_player: AudioStreamPlayer
 var _zoom_player: AudioStreamPlayer
+## How Kurt walks (see `Walk`).
+var walk_mode := Walk.NORMAL
+## A ride that moves Kurt instead of his walking (the snowboard, `MDKSnowboard`), called each tick.
+var ride: Callable
 var sliding := false
 ## Slide velocity in MDK coordinates (`0x573bf0`), its speed cap and the smoothed floor normal.
 var slide_velocity := Vector2.ZERO
@@ -324,6 +332,35 @@ func hurt(damage: int) -> void:
 	knock_damage += damage
 
 
+## Gets off the `XD2`: a running jump forward (vertical speed 40, 20 units/s).
+func jump_off() -> void:
+	walk_mode = Walk.NORMAL
+	sprite.visible = true
+	velocity.y = JUMP_VELOCITY
+	forward_speed = MAX_SPEED
+	_set_state(State.RUN_JUMP)
+
+
+## Gets off the snowboard, keeping its speeds (u/s) as his walking ones.
+func get_off_board(forward: float, strafe: float) -> void:
+	ride = Callable()
+	forward_speed = forward
+	strafe_speed = strafe
+	_set_state(State.STILL)
+
+
+## Shows a frame of one of Kurt's sprite animations (the snowboard's `K_SURF`, `K_SURFJ`).
+func show_animation(animation_name: String, frame: int) -> void:
+	var animation := sprites.get_animation(animation_name)
+	sprite.show_frame(animation, clampi(frame, 0, animation.frame_count - 1))
+
+
+## The chain gun and its muzzle flash while riding the snowboard.
+func update_gun() -> void:
+	_update_firing()
+	_update_muzzle()
+
+
 ## Facing direction (horizontal).
 func get_facing() -> Vector3:
 	return Vector3(-sin(yaw), 0.0, -cos(yaw))
@@ -356,6 +393,11 @@ func _physics_process(delta: float) -> void:
 		return
 	hurt_flash = maxf(hurt_flash - 4.0 * TICKS * delta, 0.0)
 	white_flash = maxf(white_flash - 4.0 * TICKS * delta, 0.0)
+	if ride.is_valid():
+		# No knock-down, chute or ledges while riding.
+		knock_damage = 0.0
+		ride.call(delta)
+		return
 	_update_knock_damage(delta)
 	_update_chute_sound()
 	var turbo := Input.is_action_pressed(&"turbo")
@@ -381,7 +423,7 @@ func _physics_process(delta: float) -> void:
 	_update_turning(delta, turbo)
 
 	var forward_input := Input.get_axis(&"move_back", &"move_forward")
-	var strafe_input := Input.get_axis(&"strafe_left", &"strafe_right")
+	var strafe_input := Input.get_axis(&"strafe_left", &"strafe_right") if walk_mode == Walk.NORMAL else 0.0
 	if state in [State.THROW, State.KNOCKED]:
 		forward_input = 0.0
 		strafe_input = 0.0
@@ -394,6 +436,12 @@ func _physics_process(delta: float) -> void:
 	velocity.z = horizontal.z + push.y
 	push = Vector2(move_toward(push.x, 0.0, PUSH_DRAIN * delta), move_toward(push.y, 0.0, PUSH_DRAIN * delta))
 
+	if walk_mode == Walk.RIDING:
+		# Hidden in the `XD2`, he stands (no footsteps).
+		velocity.y = maxf(velocity.y - GRAVITY * delta, -MAX_FALL_SPEED)
+		move_and_slide()
+		_set_state(State.STILL)
+		return
 	_update_vertical(delta, on_floor)
 	_update_inside_bodies()
 	var previous := global_position

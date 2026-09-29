@@ -456,6 +456,413 @@ the page at once. After the fade-out state 6 returns and the fall starts.
 (accuracy rows, random), `ALDIE` (counting kills), `XGHEAD1`/`XGHEAD2` (each head shot),
 `TELETYPE` (each typed character); all from `STATS.BNI`.
 
+## Rides (`0x573c30`, `damp_control` 0x466368)
+
+Kurt rides an object ("control alien") instead of walking: the snowboard of level 4 and the `XD2`
+of level 7's `DANT_9` (the `XE`/`X_STRIKE` bomber ride 0x46bf40 isn't analysed).
+
+**In the port** (`MDKRides`, `MDKSnowboard`, `Kurt.walk_mode`): both, with their sounds;
+`if_is_573c30` (171) tests the ridden object; hits on Kurt go to the `XD2`; standable objects
+(0x800000) are solid for Kurt even when he passes through them otherwise (0x800), so he can land on
+the board. Kurt running into a triangle group of his arena hits it (kind 8, 0x46634e), which is how
+the board breaks the ice walls. Not done: the camera roll following the board's bank, the camera
+pivot dip during a board jump. Tests: `tests/snowboard_test.sh`.
+
+### The snowboard (`XSNOWB`, 0x46ac4c)
+
+### Overview ✅
+
+The board is not a Kurt state but a **"control alien"**: an object `XSNOWB` whose pointer is kept in
+`0x573c30` (the ridden object) with the mode `0x573c34`. `damp_control` (0x466368) dispatches on the
+mode instead of calling `damp_move`:
+
+| Mode `0x573c34` | Object | Per-frame function |
+| --- | --- | --- |
+| `0x10039` | `XD`, `XD2` | 0x46a840 |
+| `0x20002` | **`XSNOWB`** | **0x46ac4c** (`snowboard_update`) |
+| `0x40031` | `X_STRIKE`, `XE` | 0x46bf40 |
+
+Bits of the mode seen for the board: `0x2` Kurt's chain gun works (0x41a304), `0x20000` board
+dispatch, `0x8000` (byte `0x573c35` bit 7) **"grounded"** flag written by the board code itself.
+Bit `0x1` is clear, so hits hurt Kurt, not the board (0x46a498/0x46a604). Bit `0x20` clear: Kurt
+is still drawn (arena_build_drawlist); the board gets draw flag 8 like the object Kurt stands on ❓.
+
+Kurt keeps his own position/box; each frame the board object is snapped under his feet. The
+object's spline **path** is only used as a steering guide (the board's heading is pulled towards the
+path direction); the object's path update doesn't move it because the board code sets its stop frame
+to the current frame (0x43c258 returns early when `round(t) == obj+0xe6`). ✅
+
+### Getting on ✅
+
+1. Scripts give the board `set_targetable 2` (opcode 41): flag `0x800000` (`obj+0x14a` bit 7).
+2. When Kurt lands on a targetable object with `0x800000` (`damp_gravity`), `0x573b84` = the
+   object and `0x573b8c` = 1. The board script sees it with `if_player_on_me` (114) and does
+   `flags_set 0x6000000` (0x2000000 = **rideable**, 0x4000000 = **controls locked**) and usually
+   `flags_clear 6` (no gravity, no collisions for the board object).
+3. Next frame, `damp_control` (in the "no ridden object" branch, after `damp_move`): if
+   `0x573b84 && 0x573b8c` then `0x573c2c = 0x573b84`; if that object is active (`obj+6`), has flag
+   `0x2000000` and Kurt isn't firing (`0x573a38 == 0`) and its type name is `XSNOWB`:
+   - `0x573c30` = board, mode `0x20002`;
+   - board flags `|= 0x80800`, then `&= ~0x800100` (net: +0x800 Kurt passes through it,
+     +0x80000, −0x100 platform, −0x800000 standable);
+   - if `0x573b8c`: sniper mode is left (0x4645c8), `0x573b8c` = 0;
+   - heading `0x573c28` = board yaw `obj+0x4c` (all scripts: `set_yaw 90` → +Y);
+   - forward speed `V` (`0x573b0c`), lateral speed `L` (`0x573b10`), `0x573b14`, `0x573b18` = 0;
+   - state request cleared (`0x57ff78`, `0x57ff70` = 0). Kurt's position is **not** changed.
+
+### Getting off ✅
+
+- Every board frame starts with: if health `0x574324 == 0` and `0x5742e0 == 0`, clear `0x2000000`
+  (so a dead Kurt falls off).
+- Otherwise only scripts clear `0x2000000` (`flags_clear 33554432`, see Level 4 below).
+- Next frame `damp_control` (flag clear, mode `0x20000`):
+  - Kurt: state 100 (`K_STILL`), priority `0x573a80` = 0, `0x573a48` = 1.0. `V`/`L` are **kept**
+    and become his walking forward/strafe speeds (same meaning in `damp_move`), so he keeps
+    sliding until the walking friction stops him.
+  - The board is thrown: `obj+0x28/0x2c` (velocity) = `(V·cos y + L·sin y, V·sin y − L·cos y) × 30 × 1.1`
+    u/s with `y` = Kurt's yaw `0x5739f0`; `obj+0x30` = Kurt's vertical speed `0x573a3c`; gravity
+    `obj+0x48` = 64 u/s², friction `obj+0x44` = 0; position = Kurt's position.
+  - `SKI`, `SKILAND`, `SKITURN` stopped; `0x573c30` = 0.
+  - The scripts then set flags 6 (gravity + collisions), `stop_path`, and kill the board
+    (`set_health 0`) once it touches the floor (`if_flag14c_2`).
+- 0x43d734 (object removed) also clears `0x573c30` if it's the board.
+
+### Per-frame update `snowboard_update` (0x46ac4c) ✅
+
+Order matters; this is the exact order of the code.
+
+#### Variables
+
+| Name | Address | Meaning |
+| --- | --- | --- |
+| `V` | `0x573b0c` | forward speed, u/tick, along the heading |
+| `L` | `0x573b10` | lateral speed, u/tick (positive = right of the heading) |
+| `H` | `0x573c28` | heading (deg) — direction of travel, follows the path |
+| `S` | `obj+0x100` | steering / carve angle (deg, ±30; positive = left). Board yaw = `H + S` |
+| `P` | `obj+0x13c` | board pitch (deg, 0–360; positive = nose up) |
+| `T` | `0x573a58` | ticks the turn key has been held |
+| `J` | `0x573a54` | ticks the jump key has been held (50 after a jump) |
+| `A` | `0x4920d4` | ticks in the air (for sounds) |
+| `G` | `0x573c35 & 0x80` | grounded, as left by the previous frame (see "Board attitude") |
+| `E` | | controls enabled: `obj` flag `0x4000000` clear |
+| `I` | `0x5014ec` | turn input: ±4 per key (`0x57eb34` → +4, `0x57eb30` → −4); mouse: `4 × clamp(dx/sens/dt, ±4)`. `I > 0` lowers `S` (clockwise = right), so `0x57eb34` should be "turn right" ❓ (physical keys unconfirmed) |
+| `F` | `0x5014f0` | forward input: +0.05 forward, −0.05 back; mouse `−dy·0.05·0.5` |
+| jump / fire | `0x50152c` / `0x501534` | keys |
+
+Note: `input_read_axes` runs after the mode function in `damp_control`, so inputs are one frame old.
+
+#### 1. Setup
+
+- State request: `0x57ff78` = 201 (`K_SURF`), priority `0x57ff70` = 2.
+- `P -= |S| × 0.25` (undo last frame's carve tilt, re-added at the end).
+- `(s, c) = (sin H, cos H)`.
+
+#### 2. Steering `S`
+
+```
+if E and I > 0:                       # right
+    T += ticks
+    if S > 0: S = 0                   # reversing snaps to straight
+    else:
+        rate = (G and T < 15) ? T·I·2/30 : I     # ramp over 15 ticks on the ground
+        S = max(S − rate·dt, −30)
+elif E and I < 0:                     # left
+    T += ticks
+    if S < 0: S = 0
+    else:
+        rate = (G and T < 15) ? T·I·2/30 : I
+        S = min(S − rate·dt, +30)
+else:
+    T = 0
+    S moves towards 0 by 3·dt (90 °/s)
+```
+
+With keys: up to 4 °/tick (120 °/s), full after 15 ticks; ≈ 15 ticks from 0 to ±30. In the air the
+ramp is skipped (full rate at once).
+
+#### 3. Speed (only when `G`)
+
+- If `S ≠ 0`: `L = S × (−0.8333) × V × 0.0125 = −S·V/96` (u/tick). S = +30 → `L = −0.3125·V`
+  (left). When `S == 0`, `L` keeps its last value ❓ (tiny).
+- If controls are locked (`!E`): `V += 0.05·dt` up to 2.5.
+- Else:
+  - `F > 0`: if `V < 2.5`: `V = min(V + F·dt, 2.5)` (0.05 u/tick², 45 u/s², up to 75 u/s).
+  - `F < 0`: if `V > 1.1667`: `V = max(V + F·dt, 1.1667)` (brake to 35 u/s).
+  - `F == 0`: below 1.5: `V = min(V + 0.05·dt, 1.5)`; above: `V = max(V − 0.0027778·dt, 1.5)`
+    (cruise 45 u/s; decay 2.5 u/s²).
+- In the air (`!G`): `V` unchanged; `L` brakes towards 0 by `0.0055556·dt` (`0x4687a4`, constant
+  `0x3bb60b61`).
+
+#### 4. Move ✅
+
+```
+fwd = (V·dt·c, V·dt·s)
+if V ≠ 0: damp_collide_move(fwd.x, fwd.y, 0, 0.75, default box)
+lat = (L·dt·s, −L·dt·c)
+if L ≠ 0: damp_collide_move(lat.x, lat.y, 0, 0.75, default box)
+```
+
+Same collision as walking (box 0.6×0.6×2.5, slide unless within 30° of head-on). **Walls don't
+change `V`.** While riding, `damp_collide_move` doesn't sweep the second arena (`0x573c30 != 0`).
+Objects Kurt's box touches set `0x573c2c` (the board itself and objects with flags 0x810 are
+skipped).
+
+#### 5. Stick to downhill slopes ✅
+
+If on a floor (`0x573c10`) and `0x573a4c == 0`: `n` = floor normal (`0x573c14`, flipped to
+`nz ≥ 0`). If `nz > 0.25` and `m = fwd + lat` (requested, u/frame) gives `m·n = m.x·nx + m.y·ny > 0`
+(going down): `vz = min(vz, −(m·n)/dt_s)` (vertical speed `0x573a3c`, u/s).
+
+#### 6. Gravity
+
+`damp_gravity()` (0x469efc) as for walking (64 u/s², ≤ 250 u/s, floor `0x573c10`). On the board it
+skips the hard landing (no state 806, no 10 damage). `damp_vertical` isn't called: no fall/chute
+states. Then `G = (0x573c10 != 0)`.
+
+#### 7. Board attitude (pitch) ✅
+
+- `f = obj+0xac/0xbc/0xcc` (the board's forward axis, matrix column 0). Front end
+  `Fp = pos + 4f + (0,0,−0.01)`, back end `Bp = pos − 4f + (0,0,−0.01)`.
+- For each end, a BSP ray from `end + (0,0,3)` down to `end` (0x421708, Kurt's arena; then the second
+  arena with 0x421680 if `0x573a68 && !0x573b00`). A hit replaces the end with the hit point.
+  So only ground within 3 u **above** the end counts (the end is buried).
+- `v` = `Fhit − Bhit` (both), `Fhit − pos` (front only), `pos − Bhit` (back only); none: skip.
+- If any hit: `G = true` (0x573c35 |= 0x80) and
+  ```
+  target = atan2_deg(v.z, |v.xy|)            # 0..360
+  if 45 < P < 180: target = 45
+  elif 180 <= P < 315: target = 315
+  wrap target and P to (−180, 180]
+  P moves towards target by 90·dt_s (3 °/tick); if P < 0: P += 360
+  ```
+
+#### 8. Slope acceleration (when `G`) ✅
+
+`k = sin P`:
+- Nose down (`P > 180`): if `V < 2.6667`: `V = min(V − k·0.066667·dt, 2.6667)` (60·sin u/s², up to
+  80 u/s).
+- Nose up (`0 < P ≤ 180`): if `V > 1.1667`: `V = max(V − k·0.066667·dt, 1.1667)`.
+
+#### 9. Jump ✅
+
+```
+if E and jump key and not (arena == "CMEAT_1" and Kurt.y >= 2131):
+    if G and J <= 12:
+        vz = 28.5 u/s; Kurt.z += 1; floor 0x573c10 = 0
+        J = 50; anim frame 0x573a78 = 0; 0x573a80 = 0
+        state request 801 (K_SURFJ), priority 8
+    J += ticks
+else:
+    J = 0
+```
+
+The key may be pressed up to 12 ticks before landing (buffer). One jump per press. Peak on flat
+ground ≈ 6.3 u, ≈ 27 ticks in the air. Jumping is disabled at the end of corridor `CMEAT_1`
+(y ≥ 2131).
+
+#### 10. Sounds ✅ (`SKI`, `SKITURN` loop, flag 1 in `LEVEL4S.SNI`; `SKILAND` one-shot; all 2D)
+
+- In the air (`!G`): `A = round(A + dt)`; if `A >= 7` and `SKI` plays: stop `SKI` and `SKITURN`.
+- On the ground: if `A >= 15`: `SKILAND` (restart); `A = 0`; `SKI` (play if not playing);
+  `SKITURN` (play if not playing) while `|S| > 22.5`, else stopped.
+
+#### 11. Chain gun ✅
+
+Fire key and `0x573a80 <= 7` and `0x57ff70 <= 7`: start firing (`0x573a38` = 1, `0x46c3e4(1)`);
+otherwise stop it. So Kurt fires while riding but not during a jump (priority 8).
+
+#### 12. Follow the path ✅
+
+Path = `obj+0xec` (40-byte keys), time `t = obj+0xf0`. Skipped if `t >= last key frame`.
+
+```
+d = |spline(t).xy − Kurt.xy|²; step t by +1 while the distance shrinks; t −= 1
+step t by +0.2 while the distance shrinks; t −= 0.2       # forward only
+if t changed:
+    Q = spline(old t); P2 = spline(t + 0.2)   # the last point evaluated
+    obj+0xf0 = t; obj+0xe6 = round(t)          # freeze the object's own path update
+    pathHeading = atan2_deg(P2.y − Q.y, P2.x − Q.x)
+    # unstick: V >= 1.1667 and Kurt moved < 0.5 u/tick this frame (xy)
+    if V >= 1.1667 and |Kurt.xy − previous.xy|/dt < 0.5:
+        damp_collide_move(2 × normalize(Q.xy − Kurt.xy), 0, 0.75)
+```
+
+If `t` didn't change, `pathHeading` (a stack local) keeps a stale value ❓; the unstick only happens
+when `t` advances, so a fully blocked Kurt isn't nudged ❓.
+
+#### 13. Heading ✅
+
+```
+if G:
+    d = pathHeading − H
+    ccw = (0 <= d < 180) or d < −180
+    rate = 1.3333 + (ccw ? +S : −S) × 1.3333 × (1/30) × 0.75     # = 4/3 ± S/30 °/tick
+else:
+    rate = 0.4                                                   # 12 °/s in the air
+H = turn_towards(pathHeading, H, rate·dt)          # 0x460968, shortest way, no overshoot, 0..360
+Kurt.yaw 0x5739f0 = turn_towards(H, yaw, 360·dt_s)  # 12 °/tick; the camera uses this yaw
+```
+
+So the player doesn't really choose the direction: the heading follows the path at 40 °/s,
+carving towards a turn (S on the same side) raises it up to 70 °/s, against it lowers it to
+10 °/s. The real steering is the lateral drift `L` (up to 0.3125·V sideways, ≈ 17° off the
+heading).
+
+#### 14. Place the board ✅
+
+- `obj pos = (Kurt.x, Kurt.y, Kurt.z − 0.25)`; `obj+0x4c` (yaw) `= H + S`; `P += |S| × 0.25`
+  (nose up by up to 7.5° while carving).
+- `0x57ff74 = 1`: `damp_control` doesn't decay the camera roll.
+- Camera roll `0x573910` moves towards the board's bank `obj+0x54` at 45 °/s (1.5 °/tick). The bank
+  itself comes from the object engine's automatic banking (yaw changes, ±10°) ❓.
+
+#### 15. Ramming ✅
+
+If Kurt's box touched an object this frame (`0x573c2c`, set in `damp_collide_move`), whose flags
+have none of `0x40304000` (not a door 0x100000, swinging 0x400000, 0x4000, 0x40000000) and
+`0 < health < 65000`: `object_kill(obj)` (0x43d6d4: death script or explosion) and Kurt takes
+5 damage (0x46a498: 3 on easy, 10 on hard; red flash; no knock-down on the board, see below).
+
+### Other effects while riding ✅
+
+- No knock-down: `damp_control` skips it while `0x573c30 != 0` (the damage still counts).
+- No ledge grab, no chute, no fall states, no hard-landing damage.
+- `damp_collide_move`: second arena not swept; the board end rays do test it.
+- Teleports (0x41bce4) move the board too (0x43d7bc).
+- Items (`0x46ca38`) still run after the board function.
+
+### Animations ✅ (`LEVEL4S.SNI`, loaded by 0x4671bc into `0x492018` / `0x49201c`)
+
+| State | Anim | Frames | Behaviour (`damp_animate`) |
+| --- | --- | --- | --- |
+| 201 | `K_SURF` | 8 (72×115, hotspot ≈ (55, 0)) | loops, 1 frame/tick; camera pivot `0x573b7c` = 4.5; firing: muzzle flash every other frame at offset (−42 + rand 5, 12 + rand 5) |
+| 801 | `K_SURFJ` | 11 (≈ 74×134), half = 5 | frames 0→5 then holds on 5 in the air; landing (`0x573c10`) with frame > 3 jumps to ≥ 6 and plays to 10, then state 201 (priority 2); landing earlier → 201 at once. Camera pivot: `4.5 − 0.2·frame` below frame 5 (down to 3.7), then `+dt_s` per frame (1 u/s) back to 4.5 |
+
+### Level 4 scripts ✅ (`LEVEL4.CMI`; offsets = file offsets)
+
+Every board script: `follow_path <path>, flags1 0` (absolute, so the spawn position is ignored and
+the board sits at key 0), `path_stop_at 0`, `set_path_speed 0`, `set_yaw 90`, `flags_set 0x820`,
+then waits for Kurt (`set_targetable 2`, `if_player_on_me`). While riding they run
+`group_state_near_player 2, 10, 31, 1, 2` every frame (shows the slope triangle groups around
+Kurt).
+
+| Spawned by | Path (keys, frames, ≈ length) | On mount | Events | Dismount (flags_clear 0x2000000) |
+| --- | --- | --- | --- | --- |
+| `MEAT_1` 0x8ca (after group 7 shatters) | 16 keys, 0–300, 3277 u, (1, −70) → (63, 3038) | The board only becomes rideable when alien `XS` dies: its death script (0xb94) sets arena flag 2 and commands `XSNOWB` to 0xa85. Then `flags_set 0x6000000`, `flags_clear 6` (locked: auto-accelerates to 2.5) | Kurt in rect x −8…8, y 58…100: groups 2 off, `arena_show CMEAT_1`, `ICEXP1`, shatter group 2 (ice wall), wait 0.25 s, groups 5/3, **controls on** (`flags_clear 0x4000000`). Rect x 40…98, y 2542…2586: `arena_show MEAT_3` | box x −50…200, y −2674…3176, z −548…−510; `arena_show NONE` |
+| `MEAT_7` 0x13740 | 40 keys, 0–750, 9906 u, (0, 14803) → (−218, 23916) | clear 0x4000006, set 0x6000000 (locked); message `TENBONES` "Pick up 10 red bones for a surprise powerup" (5 s), global var 0 = 0 | rect x −42…17, y 14811…14873: `set_574304 1`, door `X4DOOR` #1000 opens; rect y 14828…14873: controls on | rect x −260…−187, y 23970…24100; `arena_show NONE` |
+| `CMEAT_3` 0x23953 | 41 keys, 0–750, 10286 u, (420, 4285) → (−2, 13552) | `group_set_hit_flags 3, 72`; set 0x6000000, clear 6 and 0x4000000 (controls on at once); `TENBONES` | — | box x −1000…1000, y 12000…14000, z −2000…−1960 |
+| `MEAT_2` 0x4a0f | 14 keys, 0–200, 3564 u | set 0x6000000, clear 6 and 0x4000000 | — | none in its script ❓ (maybe unused) |
+
+After dismount each script sets flags 6, `stop_path`, and `set_health 0` when the board lands.
+Which of these rides the normal level reaches (MEAT_2, CMEAT_3) is ❓.
+
+### Constants ✅
+
+| Value | Address | Use |
+| --- | --- | --- |
+| 0.25 | 0x497a84 | carve tilt `|S|/4`; slope `nz` threshold; unstick 0.5² |
+| 3.0 | 0x497a8c | S return rate; ray start height |
+| 2.0, 1/30 | 0x497a94, 0x497a9c | steering ramp `T·I·2/30`; unstick distance 2 |
+| ±30 | 0x497aa4/0x497aac | S limits |
+| −0.8333, 0.0125 | 0x497ab4, 0x497abc | `L = S·(−0.8333)·V·0.0125` |
+| 1.5 | 0x497ac4 | cruise speed |
+| 0.0027778 | 0x497acc | decay above cruise |
+| 0.05 | 0x497ad4 | acceleration |
+| 1.16667 | 0x497adc | minimum speed (brake, uphill, unstick) |
+| 2.5 | 0x497ae4 | max speed with input / locked |
+| 4.0 | 0x497aec | board half length for the rays |
+| −0.01 | 0x497af4 | ray end offset |
+| 45, 180, 315, ±360 | 0x497afc, 0x497b04, 0x497b0c, 0x497b14/0x497b24 | pitch limits; 45 also roll speed |
+| 90 | 0x497b1c (f32) | pitch speed °/s |
+| 0.066667 | 0x497b2c | slope acceleration × sin P |
+| 2.66667 | 0x497b34 | max downhill speed |
+| 22.5 | 0x497b3c | `SKITURN` threshold on |S| |
+| −1, 0.2, −0.2 | 0x497b44, 0x497b74, 0x497b4c | path search steps |
+| ±180 (f32) | 0x497b54, 0x497b58 | heading direction test |
+| 1.33333, 0.75 | 0x497b5c, 0x497b64 | heading rate `1.3333 ± S·1.3333/30·0.75` |
+| 0.4 | `0x3ecccccd` | heading rate in the air |
+| −0.25 | 0x497b6c | board z below Kurt |
+| 360 | 0x497b24 | Kurt yaw follow °/s |
+| 0.0055556 | `0x3bb60b61` | air brake of L |
+| 28.5 | `0x41e40000` | jump speed u/s |
+| 2131.0 | `0x45053000` | CMEAT_1 no-jump y |
+| 30, 1.1 | 0x497648 (f32), 0x49764c | board throw velocity factor |
+| 64 | `0x42800000` | thrown board gravity |
+| 12 / 15 / 7 | code | jump buffer ticks / `SKILAND` air ticks / stop `SKI` air ticks |
+
+### The `XD2` (0x46a840)
+
+**Correction**: 0x46a840 is not the `XE` ride. `damp_control` (0x466368) picks the handler from the
+control alien's type name:
+
+| Type | Mode `0x573c34` | Handler |
+| --- | --- | --- |
+| `XD`, `XD2` | 0x10039 | 0x46a840 (this section) |
+| `XSNOWB` | 0x20002 | 0x46ac4c snowboard |
+| `X_STRIKE`, `XE` | 0x40031 | 0x46bf40 bomber: steers a target, fire drops `XBN_BOMB` ❓ not analysed |
+
+Mode bits: byte `0x573c36` 1/2/4 selects the handler; 0x1 → Kurt's damage goes to the ridden
+object (0x46a498, 0x46a604: its health −damage unless ≥ 65000, killed at < 1); 0x2 clear →
+Kurt's chain gun is off (0x41a304); 0x20 → Kurt isn't added to the draw list (0x418a5b) ❓ (hidden).
+0x8, 0x10 unused.
+
+**Which level**: only `XD2` in level 7 `DANT_9` sets flag 0x2000000 (opcode 116). `XD` exists in
+levels 3–7 but no script makes it rideable. Model `XD2` (parts `XD1_BACK`, `XD1_IN1`, `XD1_IN2`,
+animation `XD2_MOVE`, sound `XDSING`) in `LEVEL7O.MTO` ❓ (what the creature looks like).
+
+**Getting on** (`damp_control`, Kurt not riding, state < 800): candidate `0x573c2c` = an object whose
+visible part Kurt's box touched in `damp_collide_move`, or the platform he stands on
+(`0x573b84` with `0x573b8c`). Mounts when the candidate is active, has flag 0x2000000, Kurt doesn't
+fire (`0x573a38` = 0) and is on the ground (`0x573a48` = 0):
+`0x573c30` = object, mode 0x10039, object flag |= 0x80000, ride yaw `0x573c28` = object yaw,
+Kurt's position = object position, speeds `0x573b0c/10/14/18` = 0. If Kurt is in the air, the
+object's flag 0x2000000 is cleared, the "Unrecognised controlalien" message is logged and nothing
+happens ❓.
+
+`DANT_9` `XD2`: follows a path; when killed its death script (127785) makes it indestructible,
+slumps it (`anim_once`), and every frame sets flag 0x2000000 only while Kurt is **behind** it
+(`if_target_angle` beyond ±135°). Once ridden (`if_is_573c30`): opens the `X7DOOR` doors, swaps the
+`XD1_*` parts, health 50, loops its animation; when Kurt enters the box
+x 130–183, y 4898–4929 it waits 3.5 s, clears 0x2000000 (Kurt jumps off), commands the `XS`
+and dies (health 0).
+
+**Each frame** (0x46a840, called instead of `damp_move`):
+
+- Floor factors from the floor triangle `0x573c10`: accel/friction = 1.0/1.0 on a floor, 0.5/0.1 on
+  slippery floors (triangle flag 0x04), 0.75/0.75 in the air.
+- Turn: turn axis `0x5014dc` ≠ 0 and turn lock `0x573a58` = 0 → `vel_accel_dt(0x573b14, 0x5014dc,
+  0x5014e0)` (Kurt's turn accel/limit: 0.9/4 °/tick, 1.3/6 turbo). Lock `0x573a58`: > 2 → 0;
+  1 cleared when the axis ≥ 0; 2 cleared when ≤ 0 ❓ (who sets it).
+- Forward: axis `0x5014e4` ≠ 0 → `0x573a88` = 1, `vel_accel_dt(0x573b0c, axis × accel factor,
+  0x5014e8)` (Kurt's walk: 0.0444 u/tick², max 0.6667 u/tick = 20 u/s; turbo 0.0889, 40 u/s;
+  negative = backwards). No strafing.
+- No forward input: `vel_friction(0x573b0c, f × 0.0667, f × 0.1778, 0.6667)` (f = friction
+  factor; the first rate below 0.6667 u/tick, the second above).
+- No turn input: `vel_friction(0x573b14, 0.4125, 1.6, 4)` (°/tick²).
+- `DUMMY` (`0x5744a8`): while any turn/forward input, started if not playing (`0x402fd8(snd, 0)`)
+  and its volume set to 0x2000 (0x4032e8, −18.75 dB); loops by its SNI flag; stopped when there's
+  no input and on dismount. 2D.
+- Ridden object animation fps `+0xe0` = 30 while forward or turn speed ≠ 0, else 0 (freezes).
+- Move: dx, dy = conveyor push + `0x573b0c` × dt_ticks × (cos, sin)(ride yaw); ride yaw
+  −= `0x573b14` × dt_ticks, wrapped to 0–360 (positive turn = clockwise).
+  `damp_collide_move(dx, dy, 0, 0.75, 0, 0)` (Kurt's box; ridden object ignored as obstacle).
+- Air ticks `0x573a48`: 0 → +1 when vz (`0x573a3c`) < −16; else reset to 0 when vz > 0 or
+  (vz = 0 and on the floor `0x573a18 & 1`), otherwise += dt_ticks. Then `damp_gravity` (0x469efc,
+  no jump while riding) and `damp_look_updown` (0x4689c8).
+- Fire key (`0x501534`) held: object flag |= 0x1, `ALERT` (`0x574464`, 2D, `0x402fd8(snd, 0)`:
+  replays whenever it ended), alarm `0x573aec` = 10 (`if_alarm`, opcode 27, true for scripts).
+  Released: flag 0x1 cleared and `0x573aec` = 0 (also silences other alarms that frame ❓).
+- Ridden object: yaw = ride yaw, position = Kurt's position. Kurt's animation requests
+  `0x57ff78/0x57ff70` = 0 (he stands, `K_STILL` ❓).
+- **Camera**: Kurt's yaw `0x5739f0` turns towards the ride yaw by ≤ 360 × dt (0x460968); the normal
+  third-person camera follows Kurt ❓ (no ride-specific camera code found).
+
+**Getting off** (`damp_control`, flag 0x2000000 cleared by the script): Kurt state 703 (`K_RJMP`),
+`0x573a80` = 7, `0x573a4c` = 1, `0x573a50` = 0, `0x573a5c` = 1, `0x573a54` = 1, vz = 40 u/s,
+forward speed `0x573b0c` = 0.6667 u/tick (20 u/s along his yaw), `DUMMY` stopped, `0x573c30` = 0:
+a running jump forward. If the ridden object is freed (0x43d734), `0x573c30` = 0 and Kurt takes 50
+damage.
+
 ## The fall (state 2, `fall_3d.c`)
 
 Kurt falls from orbit onto the minecrawler before each level (not before LEVEL5, which loads

@@ -52,6 +52,8 @@
   goes into connected arenas (teleports stay put); type 4 DTI objects; rays only in Kurt's and
   the second arena; thrown items go with their arena.
 - `SW_H150` running away from Kurt, the holy cow of `SW_EWJ`.
+- Rides: the snowboard of level 4 and the `XD2` of level 7 (`MDKRides`); Kurt breaks triangle
+  groups he runs into (the ice walls).
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
@@ -67,8 +69,7 @@
    picked by crossing connections, as the original).
 2. **Sniper mode**: the 3D clip on the screen and the air strike's iris.
 3. **Sound**: the sound options' `OPTSONG`.
-6. **Rides**: the snowboard of level 4 (`XSNOWB`) and the `XD2` of level 7's `DANT_9`, with their
-   sounds (see docs/snowboard_draft.md, docs/mechanics_draft.md).
+6. **Rides**: the `XE` bomber ride (0x46bf40), the camera roll on the board.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.
 5. **Level flow**: F2 snapshots (a full save of the level's state).
