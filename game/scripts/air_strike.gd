@@ -59,6 +59,8 @@ func call_strike(eye: Vector3, yaw: float, pitch: float) -> bool:
 	var dive := GameState.index_of(runtime.level.number) > 3
 	if dive:
 		used_up = true
+	# Bones in his plane, full screen (without him when he dives).
+	runtime.play_strike_scene(MDKStrikeScene.Kind.BONES, dive)
 	_start(target, dive)
 	return true
 

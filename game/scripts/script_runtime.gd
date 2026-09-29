@@ -121,6 +121,8 @@ var _camera_point := Vector3()
 var level_over := false
 ## A level ended (`special_event` ≤ 50), or the whole game (event 81).
 signal level_ended(game_over: bool)
+## The full-screen strike started (true) or ended (false): the game is paused but not the music.
+signal strike_scene(active: bool)
 var town_ticks := 0
 var current_arena := ""
 var objects: Array[MDKObject] = []
@@ -336,8 +338,9 @@ func special_event(obj: MDKObject, event: int) -> void:
 		return
 	match event:
 		51:
-			# Kurt strikes (0x4779e0): the original first plays Kurt's `X_STRIKD` animation full screen
-			# (0x4398f0, not done yet), then puts him at the object, which moves 4 units along y.
+			# Kurt strikes (0x4779e0): his `X_STRIKD` animation full screen (0x4398f0), then he's put
+			# at the object, which moves 4 units along y.
+			play_strike_scene(MDKStrikeScene.Kind.KURT, false)
 			kurt.teleport(MDKMeshBuilder.to_godot(obj.mdk_position), deg_to_rad(obj.yaw - 90.0))
 			obj.mdk_position.y += 4.0
 			_start_cutscene(CUTSCENE_STRIKE, obj)
@@ -795,6 +798,15 @@ func kill(obj: MDKObject, yaw := 0.0) -> void:
 		obj.death_script = 0
 	else:
 		explode(obj, yaw)
+
+
+## Plays the full-screen strike (0x4398f0) while the game waits.
+func play_strike_scene(kind: MDKStrikeScene.Kind, plane_only: bool) -> void:
+	var scene := MDKStrikeScene.new()
+	add_child(scene)
+	scene.finished.connect(strike_scene.emit.bind(false))
+	strike_scene.emit(true)
+	scene.play(self, kind, plane_only)
 
 
 ## Blows an object up (0x43d224): its explosion sound (opcode 25, or `EXPLODE`), a white flash by

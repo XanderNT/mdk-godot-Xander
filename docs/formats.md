@@ -151,7 +151,8 @@ All parts are drawn with the object's transform: part vertices are absolute mode
 +8   u32 frame count F
 +12  u32 track offset[T]         relative to animation + 4
      f32 root motion[F][3]
-     u32 reference point count R, f32[R][F][3]
+     u32 reference point count R, f32[R][F][3] (the reference points in each frame: the
+     animation moves them, e.g. the camera points of `X_STRIKB`)
 track:
 +0   char[12] part name
 +12  u32 vertex count (the game uses the model part's count instead)

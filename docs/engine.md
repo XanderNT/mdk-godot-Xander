@@ -563,7 +563,7 @@ Snake-like aliens: a head object with links hanging off it (level 3's flying bom
 
 | Event | Where | What |
 | --- | --- | --- |
-| 51 (0x4779e0) | `MUSE_5` `XBN` | Bones strikes: 0x4398f0(1) first plays Kurt's model with `X_STRIKD` full screen (❓ how it looks; 0x43fa0c plays `X_STRIKB` the same way). Kurt is put at the object with its yaw, the object moves 4 along y, Kurt's state becomes 100 ❓; state 0x47, camera at (Kurt x − 10, y, z + 8) with yaw `90° − Kurt yaw`, pitch 0, distance 10 (shot unchanged, probably 11) |
+| 51 (0x4779e0) | `MUSE_5` `XBN` | Kurt strikes: 0x4398f0(1) first plays `X_STRIKD` full screen (see [below](#the-full-screen-strike-0x4398f0); 0x43fa0c plays `X_STRIKB` the same way before Bones' air strike). Kurt is put at the object with its yaw, the object moves 4 along y, Kurt's state becomes 100 ❓; state 0x47, camera at (Kurt x − 10, y, z + 8) with yaw `90° − Kurt yaw`, pitch 0, distance 10 (shot unchanged, probably 11) |
 | 52 (0x477ac4) | `MUSE_5` `XBN` | stop; the first `XBN` is the target; state 0x34, shot 0 (follows the dog) |
 | 53, 92 | `MUSE_5`, `DANT_10`, `GUNT_10` | state 0: the cutscene ends |
 | 54 | `MUSE_5` | nothing |
@@ -578,9 +578,28 @@ Snake-like aliens: a head object with links hanging off it (level 3's flying bom
   `game_frame` that stops Kurt firing and calls 0x40a9e0 (`endlev.c`): the level is over
   (`0x573b60` = 1), Kurt's health is at least 1, the sounds `NUKE` and `TORNADO` play and the arena
   breaks up around Kurt (`END_LEVEL`: 100000, 500, 0.15, 0.025 at 0x490654 ❓ how it looks).
-- The port runs the cutscenes (state, which objects run and show, the camera) and goes on to the
-  next level 5 s after the end; the full-screen strike, the videos, the break-up and the
-  statistics aren't done yet.
+- The port runs the cutscenes (state, which objects run and show, the camera), the full-screen
+  strike (`MDKStrikeScene`) and goes on to the next level 5 s after the end; the videos aren't done.
+
+### The full-screen strike (0x4398f0)
+
+A loop of its own, the game stopped: 0x4398f0(0) before Bones' air strike (0x43fa0c), (1) for
+Kurt's strike at the end of the game (event 51). Effects are paused (0x40319c), the music goes on.
+
+- An object of the model `X_STRIKB` (with the animation `X_STRIKB` of `TRAVSPRT.BNI`, `0x574b10`)
+  or `X_STRIKD` (the arena's animation), animation played once at 30 frames per second.
+- When the one strike of the last two levels is used (`0x57440b`, Bones dives himself) only the
+  parts `AWING`, `CANOPY`, `LEVER`, `LEVER01`–`LEVER03`, `OBJECT` show (table 0x491ddc; the hidden
+  mask `obj+0x2c8`): the plane without Bones.
+- Each frame: yaw += 45°/s, animation step, which also moves the model's reference points
+  (`anim_step_frames` 0x43ab70 copies the animation's `f32[R][F][3]` points to the model's
+  `+0x24`); the camera (0x439d70) sits at reference point 1 and looks at reference point 0 (both
+  through the object's matrix), up = +z, zoom 0.35265 (focal length 600 / 0.35265 ≈ 1701 pixels on
+  the 600×360 view: a long lens); only the sky and the model are drawn.
+- It ends with the animation or on Esc; the camera is restored (and, for the air strike, the
+  palette and `0x573a64 = 2`), the effects resume.
+- The port (`MDKStrikeScene`) pauses the game and draws the level's sky and the model in a
+  `SubViewport` over everything. Test: `--strike` (`--strike=dive` for the plane alone).
 
 ## Effects (the pool at `arena+0x5c`)
 

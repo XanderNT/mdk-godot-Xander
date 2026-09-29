@@ -8,6 +8,9 @@ var speed := 1.0
 var frame_count := 0
 ## Per frame, the object's movement in model space (MDK coordinates).
 var root_motion := PackedVector3Array()
+## Per reference point, its place in each frame (model space; `anim_step_frames` 0x43ab70 copies
+## them to the model's reference points, at most 8).
+var reference_points: Array[PackedVector3Array] = []
 
 var _bytes: PackedByteArray
 ## Lowercase track name to the track's offset.
@@ -29,6 +32,12 @@ static func parse(p_name: String, bytes: PackedByteArray, offset: int) -> MDKMod
 	animation.root_motion.resize(animation.frame_count)
 	for f in animation.frame_count:
 		animation.root_motion[f] = r.vec3()
+	for i in r.u32():
+		var points := PackedVector3Array()
+		points.resize(animation.frame_count)
+		for f in animation.frame_count:
+			points[f] = r.vec3()
+		animation.reference_points.push_back(points)
 	return animation
 
 

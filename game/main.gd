@@ -20,6 +20,7 @@
 ##   --spawn-box=TEXTURE       Create a `spawn_box` object showing that texture in front of Kurt.
 ##   --fx                      Effects test after the delay: slime drops and bubbles in front of
 ##                             Kurt, a wound and bullet holes on the first grunt (`XG`).
+##   --strike[=dive]           Bones' full-screen strike after the delay (without him: `dive`).
 ##   --sparks                  Sparks of every kind in front of Kurt after the delay, and the first
 ##                             grunt (`XG`) explodes.
 ##   --shatter=GROUP           Shatter a triangle group of Kurt's arena (`shatter_group` test).
@@ -107,6 +108,9 @@ func _ready() -> void:
 		hud.scripts = scripts
 		$FollowCamera.scripts = scripts
 		scripts.level_ended.connect(_on_level_ended)
+		# The music goes on during the full-screen strike.
+		scripts.strike_scene.connect(func(active: bool) -> void:
+			$LevelAudio.process_mode = Node.PROCESS_MODE_ALWAYS if active else Node.PROCESS_MODE_INHERIT)
 		if args.has("town"):
 			scripts.town_ticks = roundi(float(args.town) * 30.0)
 		if args.has("shatter"):
@@ -159,6 +163,8 @@ func _ready() -> void:
 			kurt.zoom = values[0]
 			if values.size() > 1:
 				kurt.sniper_pitch = values[1]
+	if args.has("strike"):
+		scripts.play_strike_scene(MDKStrikeScene.Kind.BONES, args.strike == "dive")
 	if args.has("pause"):
 		get_node(^"PauseMenu")._open()
 	if args.has("event"):
