@@ -42,20 +42,29 @@ func is_active() -> bool:
 	return _strike != null and is_instance_valid(_strike) and not _strike.dead
 
 
+## The point in the view from `eye` (MDK) along `yaw`/`pitch` a strike can hit (0x4641ac): within
+## 5000 units, with open sky 1000 units above it; null if there's none.
+func find_target(eye: Vector3, yaw: float, pitch: float) -> Variant:
+	var direction := Vector3(cos(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), sin(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), -sin(deg_to_rad(pitch)))
+	var hit := runtime.raycast(eye, eye + direction * RANGE)
+	if hit.is_empty():
+		return null
+	var target := MDKScriptRuntime.to_mdk(hit.position)
+	if not runtime.raycast(target + Vector3(0, 0, 1), target + Vector3(0, 0, SKY)).is_empty():
+		return null
+	return target
+
+
 ## Calls the strike on the point in the view from `eye` (MDK) along `yaw`/`pitch`. Returns false
 ## (and Kurt blows a raspberry) without a target, while a strike is out or when it's used up.
 func call_strike(eye: Vector3, yaw: float, pitch: float) -> bool:
 	if is_active():
 		return false
-	var direction := Vector3(cos(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), sin(deg_to_rad(yaw)) * cos(deg_to_rad(pitch)), -sin(deg_to_rad(pitch)))
-	var hit := runtime.raycast(eye, eye + direction * RANGE)
-	if hit.is_empty() or used_up:
+	var found: Variant = find_target(eye, yaw, pitch)
+	if found == null or used_up:
 		runtime.kurt.play_sound("RASPBER", SoundMixer.Start.RESTART)
 		return false
-	var target := MDKScriptRuntime.to_mdk(hit.position)
-	if not runtime.raycast(target + Vector3(0, 0, 1), target + Vector3(0, 0, SKY)).is_empty():
-		runtime.kurt.play_sound("RASPBER", SoundMixer.Start.RESTART)
-		return false
+	var target: Vector3 = found
 	var dive := GameState.index_of(runtime.level.number) > 3
 	if dive:
 		used_up = true

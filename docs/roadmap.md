@@ -58,7 +58,7 @@
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
   grenades, homing grenades, the mortar and its guidance by `bomb_follow_path`), Bones' air strike,
-  the round cameras, bullet holes.
+  the round cameras, bullet holes, the 3D clip on the screen, the air strike's iris.
 - Options in the main and pause menus (volumes, music filter, mouse, fullscreen, difficulty, keys),
   saved in
   `user://settings.cfg`; music and effects on their own buses with a limiter.
@@ -67,7 +67,6 @@
 
 1. **Aliens and scripts**: Kurt colliding with only his and the second arena (needs his arena
    picked by crossing connections, as the original).
-2. **Sniper mode**: the 3D clip on the screen and the air strike's iris.
 3. **Sound**: the sound options' `OPTSONG`.
 6. **Rides**: the `XE` bomber ride (0x46bf40), the camera roll on the board.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt

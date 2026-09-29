@@ -215,7 +215,31 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
   percent `round(100 × (1 − zoom)² × 1.05194)` in `SNIP_TXT` digits at (564, 155) with the
   `SNIP_RNG` gauge (its bottom rows, following by 3 pixels a tick) at (552, 176); `SNIP_WEP` at
   (112, 304), the icons `SNIP_W1`–`W6` of the types with ammo and the selected type's `SNIP_Ln` and
-  count (0x490fd8, 0x490fa8); the loaded rounds as 3D models along keyframes (0x41eb10, 0x490e58).
+  count (0x490fd8, 0x490fa8); the loaded rounds as 3D models along keyframes (0x41eb10, 0x490e4c).
+  Frame order (0x41e128): world, round cameras, iris, `CROSS`, `SNIPERS2`, the clip (on top).
+- **Clip on the screen** (0x41eb10): 4 keys of position, angles (a, b, c) and scale at 0x490e4c:
+
+  | Key | x | y | z | a | b | c | s |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 0 | −225 | −242 | 65 | −30 | 180 | 90 | 4 |
+  | 1 | −203 | −242 | 107 | 0 | 180 | 0 | 9 |
+  | 2 | −176 | −242 | 145 | 0 | 180 | 0 | 9 |
+  | 3 | −154 | −242 | 174 | 0 | 180 | 0 | 9 |
+
+  Round i is at `t = timer + i`, drawn when `t ≠ 0` and `t < 3`, all fields interpolated between
+  keys `trunc(t)` and `trunc(t) + 1`; matrix `s · Rz(a) · Ry(−b) · Rx(c)` (0x46dfe8). Own projection:
+  camera at the origin looking along −Y, screen right +X, down +Z, focal 250 px, centre (300, 180)
+  of the view. The model is the shown type's (`SW_SHOT`…`SW_BONES`, `0x5743e8`). At rest round 0
+  sits in the chamber (t = 0, hidden) and rounds 1, 2 at keys 1, 2 (bottom left, ≈ 47 px tall);
+  after a shot everything slides one key up-left in 0.25 s, key 1 → key 0 shrinking into the
+  chamber.
+- **Air-strike iris** (0x41ef90): opening `0x573c58` (1 open) and pulse `0x573c5c`, both 1 on
+  entering sniper mode. With type 5 shown and the clip timer at 0, the target test (0x4641ac) runs
+  each frame; valid, the iris closes by dt (1 s). Other type or invalid: it opens by dt, and at 1
+  nothing is drawn. Closed (or pulsing), the pulse falls by dt and wraps to 1. Each scope row (view
+  rows 80–359, x 108–492, centre (300, 220)) is filled from both edges inwards: red (200, 0, 0,
+  alpha 0x60) to `392 · p²`, darker red (alpha 0xC4) to `376 · p²` (the ring, while `p ≠ 1`), red to
+  the hole `384 · o²`, clear inside. Nothing marks the target point itself.
 - **Ammo** (`0x5743e8` selected type, counts at `0x5743ef + 4 × type`; zeroed on each level): 0 the
   bullet (always), 1 `SW_HOME` homing bullets, 2 `SW_SGREN` grenades, 3 `SW_HGREN` homing grenades,
   4 `SW_LGREN` mortar rounds, 5 `SW_BONES` Bones' air strike (pickups give 8, 3, 3, 8, 1, halved on
@@ -259,8 +283,8 @@ floor normal `0x573bfc`… = (0, 0, 1), state 807. The chain gun stops.
   turned to the direction and the spin is around the length.
 - The port also zooms with the mouse wheel (a notch holds the zoom key for 6 ticks); in sniper
   mode the wheel doesn't step through the ammo types, the item keys still do.
-- The port has all of it but the 3D clip on the screen and the iris around the air strike's target
-  (`MDKSniperRounds`, `MDKAirStrike`, `SniperOverlay`; the round cameras are `SubViewport`s). The
+- The port has all of it (`MDKSniperRounds`, `MDKAirStrike`, `SniperOverlay`; the round cameras
+  and the clip are `SubViewport`s, the iris is drawn row by row on the HUD). The
   air strike's curve goes through the same 5 points with Godot's `Curve3D`, not the original's
   spline parameters (0.5, 1.0, 0.5 ❓).
 

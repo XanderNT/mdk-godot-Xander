@@ -84,6 +84,10 @@ func _physics_process(_delta: float) -> void:
 
 func _process(delta: float) -> void:
 	messages.update(delta)
+	if kurt and kurt.sniping:
+		_sniper.update(delta, kurt, scripts)
+	else:
+		_sniper.reset()
 
 
 ## Scale from the original 600×360 view to the window.

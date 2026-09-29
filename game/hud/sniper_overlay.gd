@@ -3,7 +3,8 @@
 ## over the view (holes for the scope and the three round cameras at the top: 140×70 views from
 ## behind each round, 90° wide, then a colour or the `SNIPERGA` animation), the `CROSS` crosshair
 ## on the scope's centre, the zoom in percent with its `SNIP_RNG` gauge, and the ammo types (`SNIP_WEP`, `SNIP_Wn`, the selected one's
-## `SNIP_Ln` and count). See `docs/gameplay.md` ("Sniper mode").
+## `SNIP_Ln` and count), the loaded rounds as 3D models (0x41eb10) and the air strike's iris
+## (0x41ef90). See `docs/gameplay.md` ("Sniper mode").
 class_name SniperOverlay
 extends RefCounted
 
@@ -24,6 +25,35 @@ const TYPE_LABELS := [Vector2(12, 268), Vector2(12, 288), Vector2(12, 308), Vect
 const COUNT := Vector2(64.0, 315.0)
 ## The round cameras' windows in the view (0x461d80).
 const ROUND_VIEWS := [Rect2(72, 10, 140, 70), Rect2(228, 0, 140, 70), Rect2(384, 10, 140, 70)]
+## The air strike's iris (0x41ef90): with a valid target the scope reddens from its edge in 1 s,
+## leaving a hole of radius `384 × c²` (c from 1 to 0); once closed, a darker ring contracts every
+## second. View rows 80–359, x 108–492, centred on (300, 220).
+const STRIKE_TYPE := 5
+const IRIS_CENTRE := Vector2(300.0, 220.0)
+const IRIS_TOP := 80
+const IRIS_BOTTOM := 360
+const IRIS_HALF_WIDTH := 192.0
+const IRIS_RADIUS := 384.0
+const RING_OUTER := 392.0
+const RING_INNER := 376.0
+const IRIS_COLOUR := Color(200.0 / 255.0, 0.0, 0.0, 0x60 / 255.0)
+const RING_COLOUR := Color(200.0 / 255.0, 0.0, 0.0, 0xC4 / 255.0)
+## The loaded rounds (0x41eb10): round i at time `clip timer + i` (shown between 0 and 3, not at 0),
+## between keys of position, angles (z, y, x: `Rz(a) Ry(−b) Rx(c)`) and scale (0x490e4c), seen with
+## a focal length of 250 on the view; they slide into the chamber (key 0) after a shot.
+const CLIP_KEYS := [
+	[Vector3(-225, -242, 65), Vector3(-30, 180, 90), 4.0],
+	[Vector3(-203, -242, 107), Vector3(0, 180, 0), 9.0],
+	[Vector3(-176, -242, 145), Vector3(0, 180, 0), 9.0],
+	[Vector3(-154, -242, 174), Vector3(0, 180, 0), 9.0],
+]
+const CLIP_SIZE := 3
+const FOCAL := 250.0
+const ROUND_MODELS := ["SW_SHOT", "SW_HOME", "SW_SGREN", "SW_HGREN", "SW_LGREN", "SW_BONES"]
+## Clip space (x right, y away, z down on the screen) to a camera looking along −z.
+const CLIP_TO_CAMERA := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
+## Godot model space back to MDK model space.
+const GODOT_TO_MDK := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
 
 var _frame: Texture2D
 var _mask: Texture2D
@@ -39,6 +69,14 @@ var _miss: MDKSpriteAnimation
 var _miss_frames: Array[Texture2D] = []
 var _views: Array[SubViewport] = []
 var _cameras: Array[Camera3D] = []
+# The iris: its opening (1 open, 0 closed), the pulse, and whether the strike has a target.
+var _iris := 1.0
+var _pulse := 1.0
+var _target := false
+# The clip: its view, a node per round, meshes by model name.
+var _clip_view := SubViewport.new()
+var _clip_nodes: Array[MeshInstance3D] = []
+var _clip_meshes := {}
 
 
 func setup(sprites: MDKBni, palette: MDKPalette, parent: Node) -> void:
@@ -58,6 +96,7 @@ func setup(sprites: MDKBni, palette: MDKPalette, parent: Node) -> void:
 		parent.add_child(view)
 		_views.push_back(view)
 		_cameras.push_back(camera)
+	_setup_clip(parent)
 	_frame = ImageTexture.create_from_image(_frame_image(sprites, palette))
 	_mask = ImageTexture.create_from_image(_mask_image(sprites, palette))
 	var cross := sprites.get_animation("CROSS")
@@ -68,6 +107,127 @@ func setup(sprites: MDKBni, palette: MDKPalette, parent: Node) -> void:
 	for i in range(1, 7):
 		_icons.push_back(HUD._make_texture(sprites.get_image("SNIP_W%d" % i), palette))
 		_labels.push_back(HUD._make_texture(sprites.get_image("SNIP_L%d" % i), palette))
+
+
+func _setup_clip(parent: Node) -> void:
+	_clip_view.size = Vector2i(600, 360)
+	_clip_view.transparent_bg = true
+	_clip_view.own_world_3d = true
+	_clip_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	var camera := Camera3D.new()
+	camera.keep_aspect = Camera3D.KEEP_HEIGHT
+	camera.fov = rad_to_deg(2.0 * atan(180.0 / FOCAL))
+	camera.near = 1.0
+	camera.far = 1000.0
+	_clip_view.add_child(camera)
+	for i in CLIP_SIZE:
+		var node := MeshInstance3D.new()
+		_clip_view.add_child(node)
+		_clip_nodes.push_back(node)
+	parent.add_child(_clip_view)
+
+
+## Each frame in sniper mode: the iris's opening and pulse, and the rounds of the clip.
+func update(delta: float, kurt: Kurt, scripts: MDKScriptRuntime) -> void:
+	_update_iris(delta, kurt, scripts)
+	_update_clip(kurt, scripts)
+
+
+## Out of sniper mode the iris is open.
+func reset() -> void:
+	_iris = 1.0
+	_pulse = 1.0
+	_clip_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+
+## The iris closes over 1 s while the strike is selected, the clip is ready and the view has a
+## target (0x4641ac), and opens again otherwise; closed, it pulses once a second.
+func _update_iris(delta: float, kurt: Kurt, scripts: MDKScriptRuntime) -> void:
+	var strike := kurt.inventory.selected_ammo == STRIKE_TYPE
+	if strike and kurt.clip_time <= 0.0 and scripts:
+		_target = scripts.air_strike.find_target(MDKScriptRuntime.to_mdk(kurt.get_sniper_eye()), scripts.kurt_yaw, kurt.sniper_pitch) != null
+		if _target:
+			_iris = maxf(_iris - delta, 0.0)
+	if not strike or not _target:
+		_iris += delta
+		if _iris >= 1.0:
+			_iris = 1.0
+			_pulse = 1.0
+			return
+	if _iris == 0.0 or _pulse != 1.0:
+		_pulse -= delta
+		if _pulse < 0.0:
+			_pulse = 1.0
+
+
+## The loaded rounds of the selected type between the clip's keys.
+func _update_clip(kurt: Kurt, scripts: MDKScriptRuntime) -> void:
+	var mesh := _round_mesh(ROUND_MODELS[kurt.inventory.selected_ammo], scripts)
+	var shown := false
+	for i in CLIP_SIZE:
+		var node := _clip_nodes[i]
+		var t := kurt.clip_time + i
+		node.visible = mesh != null and i < kurt.clip_rounds and t != 0.0 and t < CLIP_KEYS.size() - 1
+		if not node.visible:
+			continue
+		shown = true
+		var k := int(t)
+		var f := t - k
+		var a: Array = CLIP_KEYS[k]
+		var b: Array = CLIP_KEYS[k + 1]
+		var angles: Vector3 = (a[1] as Vector3).lerp(b[1], f)
+		var scale: float = lerpf(a[2], b[2], f)
+		var rotation := Basis(Vector3(0, 0, 1), deg_to_rad(angles.x)) * Basis(Vector3(0, 1, 0), -deg_to_rad(angles.y)) \
+				* Basis(Vector3(1, 0, 0), deg_to_rad(angles.z))
+		var position: Vector3 = (a[0] as Vector3).lerp(b[0], f)
+		node.mesh = mesh
+		node.transform = Transform3D(CLIP_TO_CAMERA * rotation.scaled(Vector3.ONE * scale) * GODOT_TO_MDK, CLIP_TO_CAMERA * position)
+	_clip_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS if shown else SubViewport.UPDATE_DISABLED
+
+
+func _round_mesh(model_name: String, scripts: MDKScriptRuntime) -> Mesh:
+	if not scripts:
+		return null
+	if not _clip_meshes.has(model_name):
+		var model := scripts.find_model(scripts.current_arena, model_name)
+		_clip_meshes[model_name] = MDKMeshBuilder.build_model_mesh(model, model.get_rest_pose(), scripts.get_resolver(scripts.current_arena)) if model else null
+	return _clip_meshes[model_name]
+
+
+## The iris, row by row from the scope's edges inwards: red, the darker pulse ring, red again, then
+## the clear hole.
+func _draw_iris(canvas: HUD) -> void:
+	if _iris >= 1.0:
+		return
+	var circles: Array = []
+	var hole := IRIS_RADIUS * _iris * _iris
+	var outer := RING_OUTER * _pulse * _pulse
+	var inner := RING_INNER * _pulse * _pulse
+	if outer > hole and _pulse != 1.0:
+		circles.push_back([outer, RING_COLOUR])
+		if inner > hole:
+			circles.push_back([inner, IRIS_COLOUR])
+	circles.push_back([hole, Color.TRANSPARENT])
+	for y in range(IRIS_TOP, IRIS_BOTTOM):
+		var dy := y - IRIS_CENTRE.y
+		var colour := IRIS_COLOUR
+		var outside := IRIS_HALF_WIDTH
+		for circle: Array in circles:
+			var r: float = circle[0]
+			var edge := minf(sqrt(r * r - dy * dy) if absf(dy) < r else 0.0, outside)
+			_draw_span(canvas, y, edge, outside, colour)
+			outside = edge
+			colour = circle[1]
+		_draw_span(canvas, y, 0.0, outside, colour)
+
+
+## A row of the iris between two distances from its centre, on both sides.
+func _draw_span(canvas: HUD, y: int, near: float, far: float, colour: Color) -> void:
+	if colour.a == 0.0 or far <= near:
+		return
+	var width := far - near
+	canvas.draw_rect(Rect2(VIEW_ORIGIN + Vector2(IRIS_CENTRE.x - far, y), Vector2(width, 1.0)), colour)
+	canvas.draw_rect(Rect2(VIEW_ORIGIN + Vector2(IRIS_CENTRE.x + near, y), Vector2(width, 1.0)), colour)
 
 
 ## `SNIPERS1`: 640×480 palette indices without a header; the view's rectangle is cut out.
@@ -132,8 +292,11 @@ func draw(canvas: HUD, kurt: Kurt, rounds: MDKSniperRounds) -> void:
 			var frame := int((30.0 - camera.time) / 2.0) % _miss_frames.size()
 			var texture := _miss_frames[frame]
 			canvas.draw_texture(texture, rect.get_center() - texture.get_size() / 2.0)
+	_draw_iris(canvas)
 	canvas.draw_texture(_mask, VIEW_ORIGIN)
 	canvas.draw_texture(_cross, VIEW_ORIGIN + CROSSHAIR - Vector2(_cross_hotspot))
+	if _clip_view.render_target_update_mode == SubViewport.UPDATE_ALWAYS:
+		canvas.draw_texture(_clip_view.get_texture(), VIEW_ORIGIN)
 	# The zoom in percent: (1 − zoom)² × 1.05194 (59% at 4×), and the gauge showing as much of its
 	# height.
 	var fraction := clampf(pow(1.0 - kurt.zoom, 2.0) * 1.05194, 0.0, 1.0)
