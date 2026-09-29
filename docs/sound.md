@@ -261,7 +261,7 @@ Doppler all run **once per frame**, not per tick; the frame limiter caps at ~29.
 | `BUTSLIDE` | sliding (`damp_buttslide`, `0x4030cc`): 15000 Hz while accelerating (state 809), 11025 Hz otherwise; stopped while braking | 2D, loop |
 | `BUTBRAKE` | braking (state 810) | 2D once, loop |
 | `SKI`, `SKITURN`, `SKILAND` | snowboard (`0x46ac4c`): `SKI` while on the ground, `SKITURN` while turning faster than a threshold, `SKILAND` (restart) when landing after > 14 frames in the air; `SKI`/`SKITURN` stopped after 6 frames in the air; all stopped leaving the board (`damp_control`) | 2D |
-| `DUMMY` (volume 0x2000 = −18.75 dB), `ALERT` | riding the `XE` control alien (`0x46a840`): `DUMMY` loops while moving; fire plays `ALERT` (once) and raises the alarm | 2D ❓ which creature |
+| `DUMMY` (volume 0x2000 = −18.75 dB), `ALERT` | riding `XD`/`XD2` (`0x46a840`; `XE` is the bomber ride 0x46bf40): `DUMMY` loops while moving; fire plays `ALERT` (once) and raises the alarm | 2D |
 
 No sound for jumping, being hurt or dying comes from the code (only scripts).
 
@@ -335,6 +335,6 @@ Only used by scripts (never by code): `ALDIE` (level copy), `GRUNTFIRE`, `XF_AMB
 - Differences: Godot pans the 3D voices correctly (not the original's heading-dependent pan) and
   also in sniper mode; the volume settings are the buses' gains (0 mutes); the "fixed" voices
   (ricochets) keep being updated; no Doppler on 2D voices, as in the original.
-- Not done: `RUNNER` (pickups running away), `COW` (`SW_EWJ`), the snowboard (`SKI`, `SKITURN`,
-  `SKILAND`) and the `XE` ride, which the port doesn't have yet; `OPTSONG`/`OPTBUTT` in the sound
+- Not done: the snowboard (`SKI`, `SKITURN`, `SKILAND`) and the `XD2` ride, which the port doesn't
+  have yet; `OPTSONG`/`OPTBUTT` in the sound
   options; the end movie.

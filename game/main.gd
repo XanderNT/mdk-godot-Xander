@@ -21,6 +21,7 @@
 ##   --fx                      Effects test after the delay: slime drops and bubbles in front of
 ##                             Kurt, a wound and bullet holes on the first grunt (`XG`).
 ##   --teleport=ARENA,x,y,z    Teleports Kurt there after the delay (`teleport_player`).
+##   --cow                     Drops the holy cow of `SW_EWJ` after the delay.
 ##   --unlock                  Unlocks every door after the delay (tests of doors and the second arena).
 ##   --strike[=dive]           Bones' full-screen strike after the delay (without him: `dive`).
 ##   --sparks                  Sparks of every kind in front of Kurt after the delay, and the first
@@ -159,6 +160,8 @@ func _ready() -> void:
 	if args.has("teleport"):
 		var parts: PackedStringArray = args.teleport.split(",")
 		scripts.teleport_kurt(parts[0], Vector3(float(parts[1]), float(parts[2]), float(parts[3])), 90.0)
+	if args.has("cow"):
+		scripts._drop_cow()
 	if args.has("unlock"):
 		for obj in scripts.objects:
 			obj.door_state &= ~MDKObjectBehaviors.DOOR_LOCKED

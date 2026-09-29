@@ -30,6 +30,8 @@ const FLAG_PATH_PUSHES := 0x8000000
 ## Swings on a rope (`jump_to`, opcode 226; updated by 0x43cfe8).
 const FLAG_SWINGING := 0x400000
 const FLAG_BOUNCES := 0x20000000
+## The holy cow of `SW_EWJ` (0x440074).
+const FLAG_COW := 0x40000000
 const FLAG_PATH_ONCE := 0x400
 ## The path speed follows Kurt's distance ahead (opcode 164).
 const FLAG_PATH_SPEED_BY_KURT := 0x10000000
@@ -74,6 +76,8 @@ var variables := [0.0, 0.0, 0.0, 0.0]
 var linked: MDKObject
 ## Leader / commanding object (`obj+0x138`).
 var leader: MDKObject
+## What the holy cow falls on (null: Kurt).
+var cow_target: MDKObject
 var dead := false
 ## Mask of hidden model parts (`obj+0x2c8`).
 var hidden_parts := 0

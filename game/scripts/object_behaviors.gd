@@ -20,6 +20,22 @@ const PICKUP_CHUTE_SPEED := -15.0
 const PICKUP_TURN_SPEED := 180.0
 ## Pickups float this high once they've landed.
 const PICKUP_HOVER := 1.5
+## The pickup that runs away (0x43daf4): it starts within 20 units, stops beyond √1000 (across),
+## runs at 40 units/s and turns at 270°/s; idle it replays its animation with a chance of 72 in
+## 32768 per tick.
+const RUNNER := "SW_H150"
+const RUNNER_START := 20.0
+const RUNNER_STOP_SQUARED := 1000.0
+const RUNNER_SPEED := 40.0
+const RUNNER_TURN := 270.0
+const RUNNER_IDLE_CHANCE := 72
+## The holy cow (0x440074): 50 units/s towards its target, 1000 damage to objects, 10 to Kurt, a
+## blast hit (event −3, type −4).
+const COW_SPEED := 50.0
+const COW_DAMAGE := 1000
+const COW_KURT_DAMAGE := 10
+const COW_HIT_EVENT := -3
+const COW_HIT_TYPE := -4
 
 var runtime: MDKScriptRuntime
 var dt := 1.0 / 30.0
@@ -97,9 +113,11 @@ func update_pickup(obj: MDKObject) -> void:
 		return
 	if obj.flags & (MDKObject.FLAG_GRAVITY | MDKObject.FLAG_LANDED) == MDKObject.FLAG_GRAVITY:
 		if obj.contact_flags & MDKObject.CONTACT_FLOOR:
-			obj.height_offset = PICKUP_HOVER
+			# `SW_H150` stands on the floor, the others float.
+			var hover := 0.0 if obj.type_name == RUNNER else PICKUP_HOVER
+			obj.height_offset = hover
 			obj.flags |= MDKObject.FLAG_LANDED
-			obj.mdk_position.z += PICKUP_HOVER
+			obj.mdk_position.z += hover
 		elif obj.velocity.z < PICKUP_CHUTE_SPEED:
 			obj.velocity.z = PICKUP_CHUTE_SPEED
 			if not obj.attached:
@@ -118,8 +136,79 @@ func update_pickup(obj: MDKObject) -> void:
 		if chute.model_scale <= 0.2:
 			runtime.remove(chute)
 			obj.attached = null
+	if obj.type_name == RUNNER and not obj.attached:
+		_update_runner(obj)
 	if obj.type_name not in ["SW_H150", "SW_SEAL", "SW_SBONE"]:
 		obj.yaw = fposmod(obj.yaw + dt * PICKUP_TURN_SPEED, 360.0)
+
+
+## `SW_H150` runs away (0x43daf4): when Kurt comes within 20 units it plays `H150_R` and runs at
+## 40 units/s, turning away from him at up to 270°/s, until he's 31.6 units away (across); idle, it
+## plays `H150_I` now and then (about every 15 s).
+##
+##   IDLE ──(Kurt within 20)──▶ RUN ──(Kurt beyond 31.6)──▶ IDLE
+func _update_runner(obj: MDKObject) -> void:
+	var run := runtime.items.get_animation("H150_R")
+	var kurt := runtime.kurt_position
+	if obj.animation != run:
+		if (not obj.animation or obj.is_animation_done()) and randi() % 32768 < RUNNER_IDLE_CHANCE:
+			obj.restart_animation(runtime.items.get_animation("H150_I"), false)
+			return
+		if obj.mdk_position.distance_squared_to(kurt) < RUNNER_START * RUNNER_START:
+			obj.restart_animation(run, true)
+			runtime.mixer.play("RUNNER", SoundMixer.Start.ONCE)
+		return
+
+	var ahead := Vector2.from_angle(deg_to_rad(obj.yaw)) * RUNNER_SPEED
+	obj.push.x += ahead.x
+	obj.push.y += ahead.y
+	var away := rad_to_deg(atan2(kurt.y - obj.mdk_position.y, kurt.x - obj.mdk_position.x)) + 180.0
+	var turn := clampf(wrapf(away - obj.yaw, -180.0, 180.0), -RUNNER_TURN * dt, RUNNER_TURN * dt)
+	obj.yaw = fposmod(obj.yaw + turn, 360.0)
+	obj.flags |= MDKObject.FLAG_GRAVITY
+	if Vector2(kurt.x - obj.mdk_position.x, kurt.y - obj.mdk_position.y).length_squared() > RUNNER_STOP_SQUARED:
+		obj.restart_animation(runtime.items.get_animation("H150_I"), false)
+
+
+## The holy cow (0x440074): falling, it slides towards its target at 50 units/s on each axis and
+## hits once what it lands on (1000 damage to objects, 10 to Kurt); it blows up 0.5 s after landing.
+func update_cow(obj: MDKObject) -> void:
+	var target := obj.cow_target.mdk_position if obj.cow_target and not obj.cow_target.dead else runtime.kurt_position
+	var landed := obj.contact_flags & MDKObject.CONTACT_FLOOR != 0
+	if not obj.flags & MDKObject.FLAG_NOT_TARGET:
+		_cow_hits(obj)
+		if not landed:
+			obj.mdk_position.x = move_toward(obj.mdk_position.x, target.x, COW_SPEED * dt)
+			obj.mdk_position.y = move_toward(obj.mdk_position.y, target.y, COW_SPEED * dt)
+	if not landed:
+		return
+	obj.flags |= MDKObject.FLAG_NOT_TARGET
+	obj.parameter_timer -= dt
+	if obj.parameter_timer < 0.0:
+		runtime.kill(obj)
+
+
+## What the cow overlaps: objects of its arena lose 1000 health (a blast hit), Kurt 10.
+func _cow_hits(obj: MDKObject) -> void:
+	var bounds := runtime.get_world_bounds(obj)
+	var hit := false
+	for other in runtime.objects.duplicate():
+		if other == obj or other.dead or other.arena != obj.arena or other.flags & (MDKObject.FLAG_NOT_TARGET | MDKObject.FLAG_NOT_SOLID_2):
+			continue
+		if not bounds.intersects(runtime.get_world_bounds(other)):
+			continue
+		hit = true
+		other.hit_event = COW_HIT_EVENT
+		other.hit_type = COW_HIT_TYPE
+		if other.health < 65000:
+			other.health -= COW_DAMAGE
+			if other.health <= 0:
+				runtime.kill(other)
+	if bounds.intersects(runtime.get_kurt_box()):
+		hit = true
+		runtime.hurt_kurt(COW_KURT_DAMAGE)
+	if hit:
+		obj.flags |= MDKObject.FLAG_NOT_TARGET
 
 
 ## An opening door shows the arena behind it (0x43cc68): its other side, or its own arena, whichever

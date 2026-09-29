@@ -1054,6 +1054,13 @@ func fire_chain_gun() -> void:
 		spark(to_mdk(hit.position) - back, 1, "", Spark.GROUP if reacted else Spark.HARD)
 
 
+## The holy cow (0x46d718): dropped from 100 units above a target within 600, blowing up 0.5 s
+## after landing; flags 0x40000806 (gravity, collisions, Kurt passes through, the cow).
+const COW_HEIGHT := 100.0
+const COW_RANGE := 600.0
+const COW_FUSE := 0.5
+const COW_FLAGS := MDKObject.FLAG_GRAVITY | MDKObject.FLAG_COLLIDES | MDKObject.FLAG_NOT_SOLID_2 | MDKObject.FLAG_COW
+
 ## Rays pass through at most this many surfaces of other arenas.
 const RAY_ARENAS_MAX := 16
 
@@ -1419,6 +1426,47 @@ func play_sound_at(sound_name: String, point: Vector3) -> void:
 	mixer.play_at(sound_name, point)
 
 
+## The `SW_EWJ` easter egg (0x46d718): a holy cow (`SW_HCOW`) drops from 100 units above the enemy
+## Kurt faces (see `_cow_target()`), or above Kurt himself.
+func _drop_cow() -> void:
+	mixer.play("COW", SoundMixer.Start.RESTART)
+	var target := _cow_target()
+	var point := target.mdk_position if target else kurt_position
+	var cow := spawn(get_arena_state(current_arena).controller, "SW_HCOW", point + Vector3(0, 0, COW_HEIGHT), 0.0, -1, 0, false)
+	if not cow:
+		return
+	cow.flags = COW_FLAGS
+	cow.health = 65000
+	cow.velocity.z = -cow.gravity
+	cow.cow_target = target
+	cow.parameter_timer = COW_FUSE
+
+
+## The cow's target: the object of Kurt's arena within 600 units with the lowest score (its distance,
+## + 400 beyond 30° of Kurt's yaw, + 1000 beyond 50°) that has open sky 100 units above it and no
+## cow on it already.
+func _cow_target() -> MDKObject:
+	var best: MDKObject
+	var best_score := INF
+	for obj in objects:
+		if obj.dead or obj.arena != current_arena or obj.flags & (MDKObject.FLAG_NOT_SOLID | MDKObject.FLAG_NOT_TARGET) or obj.health >= 65000:
+			continue
+		var distance := obj.distance_to(kurt_position)
+		if distance > COW_RANGE:
+			continue
+		var angle := absf(wrapf(kurt_yaw - rad_to_deg(atan2(obj.mdk_position.y - kurt_position.y, obj.mdk_position.x - kurt_position.x)), -180.0, 180.0))
+		var score := distance + (0.0 if angle < 30.0 else 400.0 if angle < 50.0 else 1000.0)
+		if score > best_score:
+			continue
+		if not raycast(obj.mdk_position + Vector3(0, 0, 5), obj.mdk_position + Vector3(0, 0, COW_HEIGHT + 5.0)).is_empty():
+			continue
+		if objects.any(func(other: MDKObject) -> bool: return other.flags & MDKObject.FLAG_COW and other.cow_target == obj):
+			continue
+		best = obj
+		best_score = score
+	return best
+
+
 ## Kurt takes the pickups he runs through (`damp_collect_pickups` 0x46c448): the segment he moved
 ## along this tick crosses a pickup's bounds, grown by 1 unit (and 5 downwards).
 func collect_pickups() -> void:
@@ -1434,6 +1482,8 @@ func collect_pickups() -> void:
 		if sound.is_empty():
 			continue
 		mixer.play(sound, SoundMixer.Start.RESTART)
+		if obj.type_name == "SW_EWJ":
+			_drop_cow()
 		obj.flags |= MDKObject.FLAG_COLLECTED | 0x1000
 		obj.parameter_timer = 30.0
 		obj.velocity = Vector3.ZERO

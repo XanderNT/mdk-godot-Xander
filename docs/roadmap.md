@@ -49,7 +49,9 @@
 - The second arena (behind an open door, the one just left): its objects and script run, its
   aliens appear as the door opens; `arena_show`, `arena_set_neighbour` and the trigger records;
   only Kurt's and the second arena are drawn, arenas put away stop their loop sounds; Kurt only
-  goes into connected arenas (teleports stay put); type 4 DTI objects.
+  goes into connected arenas (teleports stay put); type 4 DTI objects; rays only in Kurt's and
+  the second arena; thrown items go with their arena.
+- `SW_H150` running away from Kurt, the holy cow of `SW_EWJ`.
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
@@ -61,11 +63,12 @@
 
 ## Next
 
-1. **Aliens and scripts**: colliding and casting rays with only Kurt's and the second arena,
-   projectiles and effects of arenas put away.
+1. **Aliens and scripts**: Kurt colliding with only his and the second arena (needs his arena
+   picked by crossing connections, as the original).
 2. **Sniper mode**: the 3D clip on the screen and the air strike's iris.
-3. **Sound**: the sounds of mechanics not done yet (pickups running away, the snowboard, the
-   `XE` ride), the sound options' `OPTSONG`.
+3. **Sound**: the sound options' `OPTSONG`.
+6. **Rides**: the snowboard of level 4 (`XSNOWB`) and the `XD2` of level 7's `DANT_9`, with their
+   sounds (see docs/snowboard_draft.md, docs/mechanics_draft.md).
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.
 5. **Level flow**: F2 snapshots (a full save of the level's state).

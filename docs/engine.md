@@ -416,6 +416,107 @@ with gravity; below −15 units/s their fall speed is held at −15 and a `SW_CH
 (scale −1/s) and is removed at 0.2. Landed pickups spin at 180°/s, except `SW_H150`, `SW_SEAL` and
 `SW_SBONE` (`SW_H150` plays its own animations near Kurt).
 
+### The running `SW_H150` (0x43daf4)
+
+Runs for every object with flag 0x200000 (pickup) after its velocity/friction step (0x45e74c,
+0x45e810) and before `object_anim_update`.
+
+**Only `SW_H150`** ("I Feel Top!!!") runs away. `SW_SEAL` and `SW_SBONE` only skip the 180°/s spin;
+no other pickup moves. Animations `H150_I` (idle, `0x574b14`) and `H150_R` (run, `0x574b20`),
+loaded at level load (0x404618) from `TRAVSPRT.BNI`. Sound `RUNNER` (`0x5744b4`).
+
+Before landing it falls under its chute like any pickup (engine.md "Pickups"). Once landed
+(flag 0x20000 set, or gravity flag 0x2 clear) each frame:
+
+1. `obj+0x5c` (target height offset) = 0 (other pickups keep 1.5).
+2. While its chute exists (`obj+0x312`), nothing else (the chute shrinks 1/s, removed at 0.2).
+3. **Idle restart**: if no animation (`obj+0x114` = 0) or it ended (`obj+0x118` = 0xFF00) and
+   `rand() < ticks × 72` (≈ 0.22 % per tick, mean ≈ 15 s): animation `H150_I`, fps `obj+0xe0` = 30,
+   time `obj+0xdc` = 0, frame `obj+0xe4` = −1, hold `obj+0x118` = −1, clear flag 0x8 (plays once).
+   Return.
+4. **Not running** (animation ≠ `H150_R`): if Kurt is within 20 units (3D squared distance
+   `0x417480` < 400): animation `H150_R` with the same resets, flag |= 0x8 (loops), play `RUNNER`
+   (`0x402fd8(snd, 0)`: 2D, only if not already playing). Return.
+5. **Running** (animation = `H150_R`):
+   - push (`obj+0x294/0x298`, a velocity for the next move only) += 40 × (cos yaw, sin yaw) with the
+     yaw of *before* this frame's turn → 40 u/s forward, with gravity and collisions (flags 0x2, 0x4).
+   - away angle = atan2(Kurt.y − y, Kurt.x − x) + 180, minus 360 if > 360.
+   - yaw turns towards it by at most 270 × dt (shortest arc, 0x460968).
+   - flag |= 0x2 (gravity).
+   - stop when Kurt is more than √1000 ≈ 31.6 units away **horizontally** (2D, squared > 1000):
+     animation `H150_I` (time 0, frame −1; fps and hold left as they are), clear flag 0x8.
+     `RUNNER` is not stopped.
+   - Root motion of `H150_R` may add movement ❓.
+
+No time limit and no jumping: it keeps running while Kurt stays within 31.6 units, and restarts
+each time he comes within 20. Taking it is the normal pickup collection.
+
+Placed by `spawn_flagged` (opcode 161): level 3 `HMO_5`, level 4 `MEAT_10`, level 6 `OLYM_5`,
+`OLYM_8`, level 7 `DANT_1`, `DANT_6`.
+
+```
+          dist3D < 20               dist2D > 31.6
+  IDLE ─────────────────▶ RUN ────────────────────▶ IDLE
+  (H150_I once,           (H150_R loop, 40 u/s,
+   replayed at random)     turn 270°/s away)
+```
+
+### `SW_EWJ` and the holy cow `SW_HCOW` (0x46d718)
+
+`SW_EWJ` (text "Groovy!") is an instant pickup (case 10 of 0x46d478): sound `COLLECT` (2D restart,
+game state 3 only), then 0x46d718.
+
+**Target choice** (Kurt's arena `0x573a0c`, list `arena+0x68`): among objects that are active
+(`+6`), have neither flag 0x10 nor 0x20 and health < 65000, and are within 600 units (3D,
+0x417450):
+
+- `a` = |Kurt's yaw (`0x5739f0`) − atan2(obj.y − Kurt.y, obj.x − Kurt.x)|, folded into 0–180.
+- score = distance (a < 30°), distance + 400 (a < 50°), distance + 1000 (otherwise).
+- skipped if a segment from obj + (0,0,5) to obj + (0,0,105) hits the arena BSP (0x421680, needs
+  open sky), or if a cow already targets it (an active object with flag 0x40000000 whose
+  `+0x302` points at this object's position).
+- lowest score wins (start 999999, ties go to the later object).
+
+No target → the target is Kurt himself.
+
+**Spawn**: `COW` (`0x5744ac`, 2D restart) plays; model index of `SW_HCOW` (0x45ca88; the game
+stops with "ENEMY name %s not found" if the level lacks it); object spawned in Kurt's arena at
+target position + (0, 0, 100), spawn flag 0 (0x45cdec):
+
+| Field | Value |
+| --- | --- |
+| flags `+0x148` | 0x40000806: gravity 0x2, collides 0x4, Kurt passes through 0x800, cow logic 0x40000000 |
+| health `+0x8` | 65000 (indestructible) |
+| vz `+0x30` | −gravity (`−obj+0x48`, default −32 u/s) |
+| `+0x302` | pointer to the target's position (live: follows a moving target), or Kurt's `0x5739c0` |
+| `+0x306` | 0.5 (s, landing timer) |
+
+No script. Gravity 32 u/s² (default) → from 100 up it lands after ≈ 1.8 s ❓ (unless the model's
+own gravity differs).
+
+**Each frame, before the script** (0x440074, flag 0x40000000):
+
+- While flag 0x20 is clear:
+  - box hits (0x45cf60, cow bounds `obj+0x198`): mode 2 → every other active object of its arena
+    without flags 0x820 whose bounds overlap: hit event −3 (blast, `+0x21e` = 0xFD),
+    `+0x21d` = 0xFC, hit direction = cow yaw/pitch (`+0x224/0x228`), health −1000 unless ≥ 65000,
+    `object_kill` at ≤ 0. Mode 1 → Kurt's box (`0x5739f4`) and his visible parts: `hurt_kurt(10)`
+    (0x46a498). Any hit sets flag 0x20: it hits once.
+  - while in the air (`obj+0x14c` bit 2 clear): x and y each move towards the target's x/y at
+    50 u/s (per axis, clamped: diagonal up to 70.7 u/s).
+- On the floor (`obj+0x14c` bit 2): flag |= 0x20, timer `+0x306` −= dt; below 0 →
+  `object_kill` → no death script → default explosion (`EXPLODE`, no `SW_HCOWD` model → 16 fire
+  sparks, flash).
+
+So: a cow drops from 100 up onto the enemy Kurt faces (1000 damage), or onto Kurt (10 damage),
+and explodes 0.5 s after landing.
+
+**Levels**: `SW_EWJ` is spawned in level 4 (`MEAT_4` ×3, `MEAT_8` ×4, `CMEAT_3`, `CMEAT_7` ×3)
+and level 5 (`MUSE_4`, script 26930). `SW_HCOW` is in the model tables of levels 3–8
+(`LEVELnS.MTI`, `LEVELn.CMI`).
+
+- The port does both (`MDKObjectBehaviors`, `MDKScriptRuntime._drop_cow()`); test `--cow`.
+
 ### Kurt and objects (`damp_collide_move` 0x465e34, `damp_platform_floor` 0x41d2c4)
 
 Kurt collides with the objects of his arena that are active, alive (health ≠ 0) and have neither

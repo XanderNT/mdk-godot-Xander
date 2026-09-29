@@ -60,6 +60,10 @@ func update(obj: MDKObject) -> void:
 			return
 	elif obj.flags & MDKObject.FLAG_PICKUP:
 		runtime.behaviors.update_pickup(obj)
+	elif obj.flags & MDKObject.FLAG_COW:
+		runtime.behaviors.update_cow(obj)
+		if obj.dead:
+			return
 	var time := obj.animation_time
 	obj.advance_animation(dt)
 	if not obj.frame_sound.is_empty() and obj.animation and time < obj.frame_sound_frame 			and obj.frame_sound_frame <= time + dt * obj.animation_fps * obj.animation.speed:
