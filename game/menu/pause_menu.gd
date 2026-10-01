@@ -60,6 +60,7 @@ func _show_main() -> void:
 
 
 func _resume() -> void:
+	_items.clear()
 	visible = false
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED

@@ -335,5 +335,7 @@ Only used by scripts (never by code): `ALDIE` (level copy), `GRUNTFIRE`, `XF_AMB
 - Differences: Godot pans the 3D voices correctly (not the original's heading-dependent pan) and
   also in sniper mode; the volume settings are the buses' gains (0 mutes); the "fixed" voices
   (ricochets) keep being updated; no Doppler on 2D voices, as in the original.
-- Not done: `OPTSONG`/`OPTBUTT` in the sound
-  options; the end movie.
+- The port's options screen (main and pause menus) plays `OPTSONG` on the music bus and `OPTBUTT`
+  on each change (`MenuItems`, test `tests/option_song_test.gd`); the main menu stops `MAINSONG`
+  meanwhile. In the original `OPTBUTT` also sounds on the selection key.
+- Not done: the end movie.

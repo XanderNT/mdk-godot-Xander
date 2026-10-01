@@ -6,14 +6,32 @@ extends VBoxContainer
 const TEXT_COLOR := Color(0.95, 0.8, 0.45)
 const HOVER_COLOR := Color(1.0, 1.0, 0.8)
 const SENSITIVITIES := [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+## The options screen's sounds (0x42bb6c): the `OPTSONG` loop on the music bus, so the music volume
+## can be heard, and `OPTBUTT` on each change.
+const OPTION_SOUNDS := "MISC/MDKSOUND.SNI"
+const OPTION_SONG := "OPTSONG"
+const OPTION_CHANGE := "OPTBUTT"
 
 var click: AudioStreamPlayer
 ## The controls screen waits for a key or a mouse button for this action.
 var _waiting := &""
 var _waiting_button: Button
+var _song := AudioStreamPlayer.new()
+var _change := AudioStreamPlayer.new()
+
+
+func _ready() -> void:
+	var sounds := MDKSni.load_file(MDKData.path(OPTION_SOUNDS))
+	if sounds:
+		_song.stream = sounds.get_sound(OPTION_SONG)
+		_change.stream = sounds.get_sound(OPTION_CHANGE)
+	_song.bus = &"Music"
+	add_child(_song, false, INTERNAL_MODE_FRONT)
+	add_child(_change, false, INTERNAL_MODE_FRONT)
 
 
 func clear() -> void:
+	_song.stop()
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -50,7 +68,7 @@ func add_option(text: Callable, change: Callable) -> Button:
 		change.call(step)
 		Settings.apply()
 		button.text = text.call()
-		_click()
+		_change.play()
 	button.pressed.connect(apply.bind(1))
 	button.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -88,6 +106,7 @@ func show_options(on_back: Callable) -> void:
 		Settings.save()
 		on_back.call())
 	get_child(0).grab_focus()
+	_song.play()
 
 
 ## The key bindings: pressing an item waits for a key or a mouse button (Esc cancels).

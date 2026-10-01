@@ -62,11 +62,10 @@
   the round cameras, bullet holes, the 3D clip on the screen, the air strike's iris.
 - Options in the main and pause menus (volumes, music filter, mouse, fullscreen, difficulty, keys),
   saved in
-  `user://settings.cfg`; music and effects on their own buses with a limiter.
+  `user://settings.cfg`; music and effects on their own buses with a limiter; `OPTSONG` and `OPTBUTT`.
 
 ## Next
 
-3. **Sound**: the sound options' `OPTSONG`.
 6. **Rides**: the `XE` bomber ride (0x46bf40), the camera roll on the board.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.

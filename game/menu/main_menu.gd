@@ -109,8 +109,12 @@ func _load(save_name: String) -> void:
 	get_tree().change_scene_to_file("res://game/main.tscn")
 
 
+## `MAINSONG` stops while the options play `OPTSONG` (0x42bb6c, 0x42bbc0).
 func _show_options() -> void:
-	items.show_options(_show_main)
+	music.stop()
+	items.show_options(func() -> void:
+		music.play()
+		_show_main())
 
 
 func _update_level_text() -> void:
