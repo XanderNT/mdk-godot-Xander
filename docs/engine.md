@@ -384,9 +384,9 @@ objects and the script of the active second arena run, and its DTI aliens appear
 shown (so behind a door as it opens). Only Kurt's arena and the active second one are drawn, with
 their objects; an arena in neither slot any more stops its objects' loop sounds, which start again
 when it comes back, and Kurt's thrown items there go. Rays (`raycast`) stop only on Kurt's arena
-and the second one. Not done: every reachable arena is still solid for Kurt (the port picks his
-arena by its box among the connected ones, not by crossing the connections, so this is safer);
-doors aren't moved into a newly loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
+and the second one; Kurt collides only with his arena and the active second one
+(`Level.set_solid_arenas`). The port picks his arena by its box among the connected ones, not by
+crossing the connections. Not done: doors aren't moved into a newly loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
 with the aliens, with flags 0x2008a0 and 1 health.
 
 ### Doors (0x43cc68)
