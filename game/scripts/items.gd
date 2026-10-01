@@ -12,6 +12,10 @@ const THROWN_FLAGS := 0x818a6
 const FLAG_THROWN := 0x1000
 ## Flag of an item that has landed and does its thing (`obj+0x149` bit 0x40).
 const FLAG_ACTIVE := 0x4000
+## The `XE`'s bombs (`MDKBomber`): a grenade that noses down by 45°/s to −90°.
+const KIND_BOMB := 0x81
+const BOMB_PITCH_RATE := 45.0
+const BOMB_PITCH_MIN := -90.0
 ## Thrown items fly this fast (grenades 3 times faster), 15 units/s upwards.
 const THROW_SPEED := 25.0
 const THROW_UP_SPEED := 15.0
@@ -121,6 +125,8 @@ func update_thrown(obj: MDKObject) -> void:
 	# The seal rolls over while it flies.
 	if obj.thrown_kind == KurtInventory.Item.SEAL:
 		obj.roll = fposmod(obj.roll + dt * 30.0, 360.0)
+	if obj.thrown_kind == KIND_BOMB:
+		obj.pitch = maxf(obj.pitch - BOMB_PITCH_RATE * dt, BOMB_PITCH_MIN)
 	# Grenades also stop on aliens (0x43eb48).
 	if _hits_object(obj):
 		obj.contact_flags |= 0x10
@@ -133,8 +139,8 @@ func update_thrown(obj: MDKObject) -> void:
 
 
 func _hits_object(obj: MDKObject) -> bool:
-	var excluded := 0x830 if obj.thrown_kind == 0x81 else 0x810
-	var needed := 0 if obj.thrown_kind in [KurtInventory.Item.GRENADE, 0x81] else 0x1000000
+	var excluded := 0x830 if obj.thrown_kind == KIND_BOMB else 0x810
+	var needed := 0 if obj.thrown_kind in [KurtInventory.Item.GRENADE, KIND_BOMB] else 0x1000000
 	for other in runtime.objects:
 		if other == obj or other.dead or other.health == 0 or other.arena != obj.arena or other.flags & excluded:
 			continue
@@ -153,7 +159,7 @@ func _activate(obj: MDKObject) -> void:
 	obj.flags |= FLAG_ACTIVE
 	obj.contact_flags &= ~(MDKObject.CONTACT_COLLIDED | MDKObject.CONTACT_FLOOR | 0x10)
 	match obj.thrown_kind:
-		KurtInventory.Item.GRENADE:
+		KurtInventory.Item.GRENADE, KIND_BOMB:
 			var center := obj.mdk_position
 			blast(center, 150, 40.0, 6, HIT_GRENADE, obj)
 			blast(center, 75, 40.0, 1, HIT_GRENADE, obj)

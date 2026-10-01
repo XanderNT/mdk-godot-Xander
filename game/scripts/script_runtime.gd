@@ -338,7 +338,7 @@ func _update_arenas() -> void:
 	if not current_arena.is_empty() and solid != level.solid_arenas:
 		level.set_solid_arenas(solid)
 	for obj in objects:
-		obj.visible = obj.arena in drawn
+		obj.visible = obj.arena in drawn and not rides.hides(obj)
 
 
 ## Whether an arena's objects run: Kurt's, and the second one when it's active.

@@ -53,7 +53,7 @@
   goes into connected arenas (teleports stay put); type 4 DTI objects; rays only in Kurt's and
   the second arena; thrown items go with their arena.
 - `SW_H150` running away from Kurt, the holy cow of `SW_EWJ`.
-- Rides: the snowboard of level 4 and the `XD2` of level 7 (`MDKRides`); Kurt breaks triangle
+- Rides: the snowboard of level 4, the `XD2` and the `XE` bomber of level 7 (`MDKRides`, `MDKBomber`); Kurt breaks triangle
   groups he runs into (the ice walls).
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
@@ -66,7 +66,7 @@
 
 ## Next
 
-6. **Rides**: the `XE` bomber ride (0x46bf40), the camera roll on the board.
+6. **Rides**: the camera roll on the board.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt
    away from walls instead of moving the camera closer, stopping on walls hit head-on.
 5. **Level flow**: F2 snapshots (a full save of the level's state).

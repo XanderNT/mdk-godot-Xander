@@ -61,6 +61,9 @@ func _process(delta: float) -> void:
 	if scripts and scripts.cutscene:
 		global_transform = scripts.get_cutscene_camera()
 		return
+	if scripts and scripts.rides and scripts.rides.bomber:
+		_update_bomber_view()
+		return
 	var feet := target.get_global_transform_interpolated().origin
 	# The arena pitch eases towards the pitch of the arena Kurt is in (0.85·old + 0.15·new per tick).
 	# `camera_track` (opcode 203) makes the pitch ease towards its own goal instead.
@@ -119,6 +122,13 @@ func _update_sniper_view() -> void:
 	size = SCREEN_HEIGHT * near / focal
 	frustum_offset = Vector2(0.0, SNIPER_CENTER.y - SCREEN_HEIGHT / 2.0) * near / focal
 	global_transform = Transform3D(Basis.looking_at(look, Vector3.UP), target.get_sniper_eye())
+
+
+## Riding the `XE` (0x4183f0): straight down from above Kurt, his heading at the top of the view.
+func _update_bomber_view() -> void:
+	var feet := target.get_global_transform_interpolated().origin
+	var height := scripts.rides.bomber.camera_height
+	global_transform = Transform3D(Basis.looking_at(Vector3.DOWN, target.get_facing()), feet + Vector3.UP * height)
 
 
 func _update_shake(delta: float) -> void:

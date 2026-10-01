@@ -1,11 +1,12 @@
 ## The objects Kurt rides (`0x573c30`, `damp_control` 0x466368): the snowboard of level 4
-## (`XSNOWB`, `MDKSnowboard`) and the `XD2` of level 7's `DANT_9` (0x46a840). See
-## docs/gameplay.md, "Rides".
+## (`XSNOWB`, `MDKSnowboard`), the `XD2` of level 7's `DANT_9` (0x46a840) and the `XE` bomber of
+## its `DANT_5` (`MDKBomber`). See docs/gameplay.md, "Rides".
 ##
 ## A script makes an object rideable (flag 0x2000000); Kurt gets on when he stands on it (or, for
-## the `XD2`, touches it) without firing, and off when the script clears the flag.
+## the `XD2` and the `XE`, touches it) without firing, and off when the script clears the flag.
 ##
-##   rideable + Kurt on it ──▶ riding ──(flag cleared)──▶ off (the XD2: a jump; the board: thrown)
+##   rideable + Kurt on it ──▶ riding ──(flag cleared)──▶ off (the XD2: a jump; the board: thrown;
+##                                                         the XE: a drop)
 class_name MDKRides
 extends RefCounted
 
@@ -19,6 +20,7 @@ const BOARD_FLAGS_SET := 0x80800
 const BOARD_FLAGS_CLEAR := 0x800100
 const BOARD := "XSNOWB"
 const WALKERS := ["XD", "XD2"]
+const BOMBERS := ["XE", "X_STRIKE"]
 ## The `XD2`: `DUMMY` at volume 0x2000 while moving, `ALERT` and the alarm while firing; Kurt
 ## takes 50 damage if it goes while he rides it.
 const WALKER_SOUND_VOLUME := 0x2000
@@ -27,6 +29,8 @@ const LOST_DAMAGE := 50
 
 ## The object Kurt rides, if any.
 var ridden: MDKObject
+## The bomber ride, while Kurt is on an `XE`.
+var bomber: MDKBomber
 
 var _runtime: MDKScriptRuntime
 var _board: MDKSnowboard
@@ -46,7 +50,7 @@ func update() -> void:
 	if off:
 		_dismount()
 		return
-	if not _board:
+	if not _board and not bomber:
 		_update_walker()
 
 
@@ -55,7 +59,12 @@ func on_board() -> bool:
 	return _board != null
 
 
-## Whether hits on Kurt go to the object he rides (the `XD2`).
+## Whether an object isn't drawn: the `XE` once the view is inside it.
+func hides(obj: MDKObject) -> bool:
+	return bomber != null and obj == ridden and bomber.hides_xe()
+
+
+## Whether hits on Kurt go to the object he rides (the `XD2`, the `XE`).
 func takes_hits() -> bool:
 	return ridden != null and _board == null
 
@@ -83,6 +92,9 @@ func _try_mount() -> void:
 			return
 		if type in WALKERS and kurt.is_on_floor():
 			_mount_walker(obj)
+			return
+		if type in BOMBERS:
+			_mount_bomber(obj)
 			return
 
 
@@ -120,6 +132,16 @@ func _mount_walker(obj: MDKObject) -> void:
 	kurt.sprite.visible = false
 
 
+## The `XE` (also in the air): Kurt isn't drawn and goes with it (`MDKBomber`).
+func _mount_bomber(obj: MDKObject) -> void:
+	var kurt := _runtime.kurt
+	ridden = obj
+	kurt.stop_firing()
+	kurt.sprite.visible = false
+	bomber = MDKBomber.new(_runtime, obj)
+	kurt.ride = bomber.update
+
+
 ## The `XD2` goes with Kurt, animating while it moves; its sound while the keys are held; firing
 ## sounds the alarm.
 func _update_walker() -> void:
@@ -152,6 +174,12 @@ func _dismount() -> void:
 	if _board:
 		_board.get_off()
 		_board = null
+	elif bomber:
+		# Kurt drops from where the `XE` is, and it shows again.
+		ridden.flags &= ~MDKObject.FLAG_NOT_SOLID
+		kurt.sprite.visible = true
+		kurt.get_off_board(0.0, 0.0)
+		bomber = null
 	elif ridden:
 		_runtime.mixer.stop_voice(_walker_sound)
 		_walker_sound = null

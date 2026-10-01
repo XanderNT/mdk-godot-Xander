@@ -487,9 +487,9 @@ the page at once. After the fade-out state 6 returns and the fall starts.
 ## Rides (`0x573c30`, `damp_control` 0x466368)
 
 Kurt rides an object ("control alien") instead of walking: the snowboard of level 4 and the `XD2`
-of level 7's `DANT_9` (the `XE`/`X_STRIKE` bomber ride 0x46bf40 isn't analysed).
+of level 7's `DANT_9`, and the `XE` bomber of level 7's `DANT_5` (0x46bf40).
 
-**In the port** (`MDKRides`, `MDKSnowboard`, `Kurt.walk_mode`): both, with their sounds;
+**In the port** (`MDKRides`, `MDKSnowboard`, `MDKBomber`, `Kurt.walk_mode`): all three, with their sounds;
 `if_is_573c30` (171) tests the ridden object; hits on Kurt go to the `XD2`; standable objects
 (0x800000) are solid for Kurt even when he passes through them otherwise (0x800), so he can land on
 the board. Kurt running into a triangle group of his arena hits it (kind 8, 0x46634e), which is how
@@ -827,14 +827,15 @@ control alien's type name:
 | --- | --- | --- |
 | `XD`, `XD2` | 0x10039 | 0x46a840 (this section) |
 | `XSNOWB` | 0x20002 | 0x46ac4c snowboard |
-| `X_STRIKE`, `XE` | 0x40031 | 0x46bf40 bomber: steers a target, fire drops `XBN_BOMB` ❓ not analysed |
+| `X_STRIKE`, `XE` | 0x40031 | 0x46bf40 bomber (see "The `XE` bomber" below) |
 
 Mode bits: byte `0x573c36` 1/2/4 selects the handler; 0x1 → Kurt's damage goes to the ridden
 object (0x46a498, 0x46a604: its health −damage unless ≥ 65000, killed at < 1); 0x2 clear →
 Kurt's chain gun is off (0x41a304); 0x20 → Kurt isn't added to the draw list (0x418a5b) ❓ (hidden).
 0x8, 0x10 unused.
 
-**Which level**: only `XD2` in level 7 `DANT_9` sets flag 0x2000000 (opcode 116). `XD` exists in
+**Which level**: of the walkers only `XD2` in level 7 `DANT_9` gets flag 0x2000000 (opcode 116; the
+`XE` of `DANT_5` and the snowboards get 0x6000000). `XD` exists in
 levels 3–7 but no script makes it rideable. Model `XD2` (parts `XD1_BACK`, `XD1_IN1`, `XD1_IN2`,
 animation `XD2_MOVE`, sound `XDSING`) in `LEVEL7O.MTO` ❓ (what the creature looks like).
 
@@ -890,6 +891,392 @@ and dies (health 0).
 forward speed `0x573b0c` = 0.6667 u/tick (20 u/s along his yaw), `DUMMY` stopped, `0x573c30` = 0:
 a running jump forward. If the ridden object is freed (0x43d734), `0x573c30` = 0 and Kurt takes 50
 damage.
+
+### The `XE` bomber (0x46bf40)
+
+Level 7, arena `DANT_5`. Kurt rides the flyer `XE` along a fixed path; the view is top-down and he
+drops `XBN_BOMB`s on the ground aliens with a cursor. Mode `0x573c34` = `0x40031`, handler
+0x46bf40, HUD 0x46be98, top-down camera 0x4183f0. Units: 1 tick = 1/30 s; `dt` = frame time in s
+(`0x491e24`), `dtt` = frame time in ticks (`0x491e20`), `ticks` = whole ticks of the frame
+(`0x491e18`).
+
+**In the port** (`MDKBomber`, `BomberOverlay`, `FollowCamera._update_bomber_view`): all of it, test
+`tests/bomber_test.sh` (`--bomber[=drop]`). Differences: the aiming ray tests the arena only (not
+objects); the mouse moves the cursor by a third of its screen motion; the sky mode −1 (no sky)
+isn't drawn differently; damage passed to Kurt goes through `Kurt.hurt` (it honours
+invulnerability, unlike 0x46a77c).
+
+#### Globals
+
+| Address | Meaning while riding the `XE` |
+| --- | --- |
+| `0x573c30` | ridden object (the `XE`) |
+| `0x573c34` | mode `0x40031`: 0x40000 handler 0x46bf40; 0x20 Kurt not in the draw list; 0x1 hits on Kurt go to the `XE`; 0x2 clear: chain gun off; 0x10 unused ✅ |
+| `0x490de0` | **top-down camera on** (camera_update → 0x4183f0); also a debug toggle ✅ |
+| `0x490dec` | top-down camera **height above Kurt** (50 at mount, debug keys move it within 20…200) ✅ |
+| `0x490de4`, `0x490de8` | zeroed at mount, otherwise only saved/restored (0x42f30c) ❓ unused |
+| `0x573acc`, `0x490e0c` | debug box drawing (0x41e784), switched off at mount ✅ |
+| `0x573b0c`, `0x573b10` | cursor x, y (screen pixels of the 600×360 view) ✅ |
+| `0x573b14`, `0x573b18` | cursor speed x, y (px/tick) ✅ |
+| `0x573c64` | bombs left (0…10) ✅ |
+| `0x573c68` | refill timer (s) ✅ |
+| `0x573ad0` | fire latch: 999 while the fire key is up ✅ |
+| `0x574304` | sky mode (sky_draw 0x475b4c): 0 sky image, 1 black, −1 nothing drawn ✅ |
+
+#### Getting on ✅ (`damp_control` 0x466368, branch "not riding")
+
+Conditions (same path as the snowboard/`XD`): Kurt not in sniper mode, state < 800, after
+`damp_move`; candidate `0x573c2c` = an object Kurt's box touched in `damp_collide_move` (or his
+platform `0x573b84` with `0x573b8c`). Mount if the candidate is active (`obj+6`), has flag
+`0x2000000`, `0x573c30 == 0`, Kurt isn't firing (`0x573a38 == 0`) and its type name is
+`X_STRIKE` or `XE`. Unlike the `XD`, Kurt may be in the air.
+
+The `XE` has no gravity/collision flags, health ≠ 0 and no flags 0x10/0x800, so Kurt collides
+with it: walking into the hovering `XE` mounts it.
+
+Set at mount:
+
+| What | Value |
+| --- | --- |
+| Kurt yaw `0x5739f0` | `XE` yaw `obj+0x4c` |
+| Kurt position `0x5739c0..c8` | `XE` position `obj+0x10..0x18` |
+| mode `0x573c34` | `0x40031` |
+| state request `0x57ff78`, priority `0x57ff70` | 0, 0 (Kurt's state isn't changed) |
+| `0x490de0` | 1 (top-down camera) |
+| `0x490e0c`, `0x490de8`, `0x490de4`, `0x573acc` | 0 |
+| `0x490dec` | 50.0 |
+| cursor `0x573b0c`, `0x573b10` | 300.0, 180.0 (screen centre) |
+| cursor speeds `0x573b14`, `0x573b18` | 0 |
+| `0x573c68` | 1.0 |
+| `0x573c64` | 10 |
+| `0x573ad0` | **not set** (keeps its old value; normally 999 from the last release) |
+
+No `XE` flags are changed, no sound plays (the `XE`'s own `FLY` loop goes on).
+
+#### Per frame: 0x46bf40 ✅
+
+Called by `damp_control` instead of `damp_move` (then 0x46ca38: item selection keys only). No
+gravity, no collision, no Kurt animation request.
+
+```
+o = 0x573c30
+Kurt.yaw = o.yaw                                   # top-down view turns with the XE
+H = 0x490dec - dt * 25                             # camera descends 25 u/s (0x497b8c = 25.0)
+Kurt.pos = o.pos
+if H < 0: H = 0; o.flags |= 0x10                   # camera inside the XE: hide it
+0x490dec = H
+
+if o.flags & 0x4000000:                            # controls locked (byte 0x14b bit 2)
+    0x573b1c = 0                                   # camera look-pitch offset
+    vy = 0                                         # 0x573b18 only; vx isn't cleared
+else:
+    keys = 0
+    if axisX (0x5014f4) != 0: vel_accel_dt(vx, axisX/3, limit 10*axisX); keys |= 4
+    if axisY (0x5014fc) != 0: vel_accel_dt(vy, axisY/3, limit 10*axisY); keys |= 8
+    if keys == 0 and (mouse dx or dy) and mouse on (0x574236):
+        cx += dx / 3; cy += dy / 3; vx = vy = 0    # 0x57eb24/0x57eb28, 0x497b94 = 1/3
+    if !(keys & 4): brake(vx, 0.6667)              # 0x4687a4, 0x3f2aaaab
+    if !(keys & 8): brake(vy, 0.6667)
+    cx = clamp(cx + vx*dtt, 128, 472)              # compared as int bit patterns
+    cy = clamp(cy + vy*dtt, 64, 296)
+
+    if fire (0x501534) == 0: 0x573ad0 = 999
+    else:
+        if 0x573ad0 == 999 and bombs > 0: drop_bomb()
+        0x573ad0 -= ticks                          # one bomb per press
+    if bombs < 10:
+        timer -= dt
+        if timer <= 0: bombs += 1; timer = 1.0     # +1 bomb per second
+    else: timer = 1.0
+
+if o.health != 10000:                              # damage taken by the XE goes to Kurt
+    hurt_kurt_raw(10000 - o.health)                # 0x46a77c
+    o.health = 10000
+    if Kurt.health (0x574324) < 1:                 # Kurt died
+        o.health = 0; object_kill(o)               # 0x43d6d4: XE death script
+```
+
+##### Inputs (`input_read_axes` 0x408334) ✅
+
+| Variable | Source | Use |
+| --- | --- | --- |
+| `0x5014f4` / `0x5014f8` | horizontal axis `h` × 1/3 / × 10 (0x493470, 0x493478). `h` = turn (`0x57eb30` −1, `0x57eb34` +1) or strafe (`0x57eba4` −1, `0x57eba8` +1, or turn keys with the strafe modifier), the larger; joystick analog | cursor x accel (px/tick²) / max speed (px/tick) |
+| `0x5014fc` / `0x501500` | vertical axis `v` × 1/3 / × 10. `v` = `0x57eb38` −1 (forward), `0x57eb3c` +1 (back); joystick analog | cursor y |
+| `0x501534` | fire (`0x57eb48` or a mapped button) | drop |
+| `0x57eb24`, `0x57eb28` | mouse dx, dy this frame (raw units ❓) | cursor, 1/3 px per unit |
+| `0x574236` | mouse enabled option | |
+
+So left/right move the cursor left/right, forward/back move it up/down ❓ (physical keys as in the
+rest of the docs). Turbo doesn't matter.
+
+`vel_accel_dt(v, a, lim)` (0x4688d0): `a·dtt` is added if `v` has the same sign (or is 0), else
+`v = a·dtt` (instant reversal); then clamped to `lim`. Cursor: +0.333 px/tick² (300 px/s²), max
+10 px/tick (300 px/s) after 1 s. `0x4687a4(v, r)`: `v` moves towards 0 by `r·dtt` without
+crossing it: 0.6667 px/tick² (stops from full speed in 15 ticks).
+
+##### Dropping a bomb ✅
+
+```
+S   = Kurt.pos + (0, 0, -5)                        # 0x497b9c = -5.0, spawn point
+cx  = cursorX - 300; cy = cursorY - 180            # 0x497ba4 = -300, 0x497bac = -180
+dir = (M[0][0]*cx + M[0][1]*cy,                    # M = camera matrix 0x573974
+       M[1][0]*cx + M[1][1]*cy,                    #   (0x573974, 0x573978 / 0x573984, 0x573988)
+       -600 / zoom)                                # 0x497bb4 = -600.0, zoom 0x57391c (2.4)
+bombs -= 1
+hit = ray(0x46428c, from Kurt.pos, dir, length 1000, flags 3, skip 0x30, need 0)
+t   = hit ? sqrt((S.z - hit.z) * 2 / o.gravity) : 2.5     # 0x497bbc = 2.0, o+0x48 (XE's)
+vel = ((hit.x - S.x)/t, (hit.y - S.y)/t, 0)
+```
+
+- With the top-down matrix (section 4) `dir` is exactly the view ray through the cursor pixel:
+  `dir.xy = cx·right − cy·forward`, `dir.z = −focal` (focal = 600/zoom = 250 px). The ray
+  starts at Kurt (= the `XE` = the camera once `H` is 0).
+- `0x46428c(start eax, dir edx, ebx/ecx unused, len 1000.0, out hit, out obj 0, out tri 0,
+  flags 3, skip 0x30, need 0)`: `dir` isn't normalised (flag 0x10000 clear), the end is
+  `start + 1000·dir`. Flag 1: objects of Kurt's arena (and the visible second arena) that are
+  active, alive, without flags 0x10/0x20, whose box and parts (0x45f97c, 0x414668) the segment
+  crosses — each hit shortens the segment ❓. Flag 2: BSP of Kurt's arena, then the second arena
+  if `0x573a68 && !0x573b00`. Returns 1 and the hit point; 0 and the end point if nothing.
+- Fall time `t`: the drop starts with `vz = 0` and falls by gravity, so `t` makes it land on the
+  aimed point. It uses the **`XE`'s** gravity `obj+0x48`; the `XE` script never sets it, so it's
+  the default 32 u/s² (0x43bc20), equal to the bomb's ✅. A miss (`t = 2.5` s) towards the far
+  end point gives an absurd speed ❓ (looking straight down a miss is unlikely).
+- Spawn: type index of `XBN_BOMB` (0x45ca88; nothing if missing, the bomb is still counted) →
+  `object_spawn` 0x45cdec(arena `0x573a0c`, S, id 1, type, script 0, flag 0).
+
+| Bomb field | Value |
+| --- | --- |
+| `+0x30e` | 900 (life in ticks, 30 s) |
+| `+0x58` (scale) | 1.0 |
+| `+0x30a` (item kind) | `0x81` |
+| `+0x44` (friction) | 0 |
+| `+0x148` flags | `|= 0x818a6`: gravity 0x2, collides 0x4, 0x20 (not a target), 0x80 no banking, 0x800 Kurt passes, **0x1000 Kurt's projectile** (0x43deac), 0x80000 |
+| `+0x28..0x30` velocity | `vel` above (u/s) |
+| `+0x4c` yaw | Kurt's yaw |
+| — | 0x43b65c: pose / world bounds update |
+| `+0x15c`, `+0x158` | sound `DROP` (`PTR_DAT_004920d8` → "DROP"): 0x402db0(handle +0x158, DROP, flags 0x2000e = 3D following `obj+0x10`, volume 0x7fff, pitch 1.0, 50.0); loops |
+
+#### The bomb after the drop ✅ (0x43deac, kind 0x81)
+
+Run every frame by the object update for flag 0x1000. While flying (flag 0x4000 clear):
+
+- Scale grows to 1 at 3/s (already 1).
+- **Pitch** `obj+0x13c` goes from 0 down to −90° at 45°/s (0x496ad8 = 45, 0x496ad0 = −90): it
+  noses over in 2 s.
+- Gravity 32 u/s² (≤ 220 u/s), no friction, BSP collisions (0x45e74c/0x45e810).
+- Object contact (0x43eb48): any object (no type mask) without flags 0x830 whose part boxes the
+  move crosses; sets contact flag 0x10 and remembers the object (blast source). The `XE` itself
+  (flag 0x10 once hidden) is ignored.
+- `+0x30e -= ticks`.
+
+It goes off when it touched the arena (contact 0x1/0x2), an object (0x10), or after 900 ticks:
+velocity 0, flags −0x6, flag 0x4000, then (shared with kind 5, Bones' `X_TOOTH`):
+
+1. `blast(pos, 150, radius 40, counts kills, source = touched object, targets objects + triangle
+   groups (6), hit type −7)` (0x463a94).
+2. `blast(pos, 75, radius 40, …, targets Kurt (1), hit type −7)`. Kurt is far above; if hurt the
+   damage would go to the `XE` and back to him (section 5).
+3. `explosion_spawn(arena, pos, 2.0)` (0x43cb2c): `EXPLODE` object + `EXPLODE` sound.
+4. Removed (0x43d7bc), which stops its `DROP` voice.
+
+Same numbers as a grenade (150 / 75 within 40). Triangle groups take `150·(40 − d)/40`.
+
+#### Camera, drawing and HUD ✅
+
+##### Top-down camera (0x4183f0)
+
+`camera_update` (0x4174d0) calls 0x4183f0 instead of the normal camera when `0x490de0 != 0` and
+not in sniper mode, and sets `0x5739cc..d4` = Kurt's position. With `s, c = sin, cos(Kurt yaw)`
+and Kurt at `(x, y, z)`:
+
+| Row | Direction | Translation |
+| --- | --- | --- |
+| right `0x573974..7c` | `( s, −c, 0)` | `0x573980 = −(x·s − y·c)` |
+| up `0x573984..8c` | `(−c, −s, 0)` = −forward | `0x573990 = x·c + y·s` |
+| back `0x573994..9c` | `(0, 0, −1)` | `0x5739a0 = z + H` |
+
+- The camera sits **`H` (0x490dec) above Kurt and looks straight down**; the screen's top is
+  Kurt's (= the `XE`'s) heading, so the world turns under the screen as the `XE` follows its path.
+  No pitch, roll, sway or wall clearance. Camera position `0x5738ec..f4` = `(x, y, z + H)`.
+- Projection rows `0x573944…` = rows × `1/(zoom·0.5)` (x) and `1/(zoom·0.3)` (y; sniper
+  projection uses 280/384 instead of 360/600), depth `w = z + H − p.z`: a perspective view, focal
+  600/zoom px = 250 px at zoom 2.4, centre (300, 180) — the same lens as the normal view.
+- `H` = 50 at mount, −25 u/s → 0 after 2 s (a descent into the cockpit); at 0 the `XE` gets flag
+  0x10 (not drawn: arena_build_drawlist skips it). The script unlocks the controls at the same
+  moment (2 s).
+- The sound listener uses this matrix (0x403348), so 3D sounds pan by screen position.
+
+##### Kurt and the world
+
+- Kurt isn't drawn: mode bit 0x20 keeps him out of the draw list, and damp_animate (0x4646a4)
+  skips `damp_sprite_draw` while `0x490de0 != 0`.
+- The script sets `0x574304 = −1` 0.1 s after mounting: **no sky** (the background isn't
+  drawn ❓ looking down only ground should show), back to 0 when the ride ends.
+- Chain gun off (mode bit 0x2 clear, 0x41a304); no sniper mode, no item throwing (`damp_move`
+  isn't called).
+
+##### HUD 0x46be98 ✅
+
+Called first by the HUD overlay 0x41e3c8 (from 0x41e128, after the 3D scene) when riding and
+`0x573c36 & 4`. Nothing while the `XE` has flag 0x4000000 (locked). Otherwise:
+
+| Element | Where |
+| --- | --- |
+| `BOMBTARG` (`0x490e14`, `TRAVSPRT.BNI`, loaded with `CROSS` by `level_load` 0x41b0c0) | hotspot at (300, 180), view centre |
+| `CROSS` (`0x490e10`, also the sniper crosshair) | hotspot at (round(cursor x), round(cursor y)) |
+| bombs left, `"%d"` (0x497b7c) | `FONTBIG` (0x415a20, font arg 0), **right-aligned at x 472**, baseline y 56 |
+
+`rle_draw_hotspot`: top-left = (x − hotspot x, y − hotspot y). Health, inventory and messages
+are drawn as usual.
+
+#### Damage and getting off ✅
+
+**Damage.** Mode bit 0x1: hits on Kurt (0x46a498, 0x46a604, which honour invulnerability) are
+subtracted from the `XE`'s health instead. Anything that hurts the `XE` (blasts, projectiles)
+does the same. Each frame 0x46bf40 forwards `10000 − health` to Kurt with **0x46a77c** and
+restores 10000:
+
+```
+0x46a77c(d):   # raw hurt, no invulnerability check
+  if Kurt.health == 0 and 0x5742e0 == 0: return          # already dead
+  easy (0x57423e == 0): d = d*2/3, at least 1;  hard (2): d *= 2
+  if d >= 1: red flash 0x573b70 = clamp(0x573b70 + 25·d, 75, 180)
+  Kurt.health = max(Kurt.health − d, 0)
+  knock-down counter 0x573b20 += d                       # no knock-down while riding
+```
+
+`Kurt.health < 1` after that → `XE` health 0 and `object_kill` → its death script (below).
+
+**Getting off** (`damp_control`, flag `0x2000000` clear, mode bit 0x40000):
+
+- `XE` flag 0x10 cleared (visible again), `0x490de0 = 0` (normal camera, no transition),
+  `0x573b0c/10/14/18 = 0` (also Kurt's walk speeds: he stands still), `0x573c30 = 0`.
+- Kurt keeps his state, yaw and position — the `XE`'s last position — and falls from there with
+  normal gravity from the next frame.
+- If the `XE` object is freed while ridden (0x43d734): `0x573c30 = 0` and Kurt takes 50 (0x46a498),
+  but `0x490de0` stays 1 ❓ (top-down camera stuck; the scripts never do this).
+- Who clears `0x2000000`: only the `XE` script, at the end of the path and in its death script.
+
+#### The `DANT_5` script ✅ (`LEVEL7.CMI`; file offsets; jump targets already +4)
+
+##### Trigger
+
+The comm device (triangle group 16, `M_COMM`, at (78, 2299, −67)) hit script 0x11aed: on the
+first hit (arena flag 8 clear) gosub 0x11b47: unless arena flag 9, **spawn `XE` at (0, 0, 90)
+with script 0x11baa**. The device then shows a boss bar (200 hp) and shatters at 200.
+
+##### Arrival and wait
+
+| Offset | Action |
+| --- | --- |
+| 0x11baa | instance 9000, no death script, health 65000, path 91213 (absolute, once) at 1.0 frame/tick, flags +0x20 (not a target), loop sound `FLY` |
+| | path 91213: 9 keys, (760, 3056, 298) → (85, 2347, −52), 235 frames = 7.8 s, 1165 u |
+| 0x11bed | path 91089 (relative, once, 0 → −16 in z) at 0.25: sinks 16 u in 1.3 s to z ≈ −68 |
+| 0x11c05 | arena flag 29 (stops the device's `BEEP`), flags +0x10000 (doesn't face its motion), hover path 53849 (relative, loops, ±2 u bob), own var 0 = 30, **flags +0x6000000** (rideable, locked) |
+| 0x11c23 loop | health 10000; var −= dt; **var < 0.05 (30 s) or arena flag 9 → 0x11d9d**; `if_is_573c30` → 0x11c4f |
+
+Timeout 0x11d9d: arena flag 9 (never comes back), rise 16 u (path 90965), then 0x11db8 (leave).
+
+##### Ride (0x11c4f, when Kurt is on)
+
+| Offset | Action |
+| --- | --- |
+| 0x11c4f | flags −0x20; clear arena flag 16; if arena flag 19: set flag 21 (an `XTANK` was out) ❓ |
+| 0x11c5f | priority 1; command `XE` #1000 (hidden bunker spawners), all `XTANK`, all `XBANG` → `delete_self` (0x12095); arena flag 12 (ride running) |
+| 0x11c92 | gosub 0x12d8c: 6 `XG` (#3500, yaw 270, script 0x11fd0) at (475, 3134), (495, 3134), (325, 3464), (345, 3464), (−60, 3078), (−80, 3078), z −80 |
+| 0x11c98 | flags −0x10000 (faces the path); **path 91577** (absolute, once) at **0.35 frame/tick** |
+| 0x11cb9 | wait 0.1 s; `set_574304 −1` (no sky); wait 1.9 s; **flags −0x4000000 (controls on, HUD shows)**; health 10000; death script 0x11dcf |
+| 0x11cd4 loop | path frames 100 / 342 / 491 / 570 / 610 → gosubs below; path done → 0x11d0e |
+
+Path 91577: 11 keys, frames 0–1000, ≈ 2805 u, **95 s at ≈ 29 u/s**, a loop that ends where it
+starts:
+
+| Frame | Point | Time |
+| --- | --- | --- |
+| 0 | (83, 2347, −52) | 0 s |
+| 149 | (344, 2675, 14) | 14 s |
+| 224 | (447, 2850, 75) | 21 s |
+| 292 | (482, 3023, 4) | 28 s |
+| 370 | (475, 3241, 5) | 35 s |
+| 505 | (213, 3510, −13) | 48 s |
+| 634 | (−45, 3271, 6) | 60 s |
+| 743 | (−88, 2967, −7) | 71 s |
+| 827 | (−130, 2752, 81) | 79 s |
+| 899 | (−83, 2575, −3) | 86 s |
+| 1000 | (85, 2347, −52) | 95 s |
+
+The ground is at z ≈ −71…−80, so it flies 20–160 u above it.
+
+Path-frame gosubs (each once, arena flags 23–27), `spawn_ex` `XG` #3500, z −71, script 0x11fd0:
+
+| Frame (time) | Offset | `XG`s at |
+| --- | --- | --- |
+| 100 (9.5 s) | 0x11e08 | (313, 2665), (388, 2702) |
+| 342 (32.6 s) | 0x11e4b | (422, 3255), (446, 3339), (363, 3367) |
+| 491 (46.8 s) | 0x11eab | (155, 3460), (86, 3450) |
+| 570 (54.3 s) | 0x11eee | (18, 3333), (−22, 3305), (−18, 3273) |
+| 610 (58.1 s) | 0x11f4e | (−68, 3264), (−56, 3199), (−96, 3196), (−121, 2960) |
+
+So 18 `XG`s in all: the bombing targets. Their script 0x11fd0: death script 0x12be1 (falls,
+`set_gravity 20`, dies), loops an animation; if Kurt is in sight (100, 100) and within 75 u (2D)
+it randomly animates or runs (`push_forward 15`); once arena flag 10 is set (ride over) →
+0x11fcb: arena flag 28, `delete_self`.
+
+##### End of the path (0x11d0e)
+
+1. Reward 0x11d2b: if arena flag 28 is clear, bunkers 1 and 2 are destroyed (arena flags 13, 14)
+   and no `XG` is alive: message `DA5_BOK` "100% Kills!\nBonus powerup!" (5 s) and an `SW_GATT`
+   (super chain gun) at (98, 2305, 100).
+2. Flags +0x20, `set_574304 0` (sky back), health 65000.
+3. Cleanup 0x11d6d: priority 0; command `XG` #3500 → 0x11fcb (survivors deleted); clear arena
+   flag 12, set flag 10; **Kurt invulnerable 2 s** (`0x573bd4 = 2`); if arena flag 21 spawn
+   `XTANK` at (12, 3030, −71); if arena flag 20 (and bunker 3 not destroyed) spawn `XG` at
+   (186, 3250, −4).
+4. 0x11db8: `set_574304 0`, **flags −0x2000000: Kurt gets off** at (85, 2347, −52), ≈ 19 u above
+   the floor, next to the comm device; the `XE` turns to yaw 270 at 90°/s, then flies the arrival
+   path backwards (0x11de9: path 91213, relative, from the end, speed −1) and deletes itself
+   (0x11e06).
+
+##### Death script 0x11dcf (Kurt died; see section 5)
+
+`set_574304 0`, flags −0x2000000 (Kurt dropped), cleanup 0x11d6d, arena flag 11, wait 0.01 s,
+health 0 → the death script was consumed, so the `XE` explodes (0x43d224) ✅.
+
+#### Constants ✅
+
+| Value | Address | Use |
+| --- | --- | --- |
+| 50.0 | `0x42480000` (mount), 0x490dec | camera start height |
+| 25.0 (f64) | 0x497b8c | camera descent u/s |
+| 1/3 (f64) | 0x497b94, 0x493470 | mouse px/unit; key accel px/tick² per axis unit |
+| 10 (f64) | 0x493478 | max cursor speed px/tick |
+| 0.6667 | `0x3f2aaaab` | cursor brake px/tick² |
+| 128, 472 / 64, 296 | `0x43000000`, `0x43ec0000` / `0x42800000`, `0x43940000` | cursor limits |
+| 300, 180 | `0x43960000`, `0x43340000` | cursor start |
+| −5 (f64) | 0x497b9c | bomb spawn below Kurt |
+| −300, −180 (f64) | 0x497ba4, 0x497bac | screen centre |
+| −600 (f32) | 0x497bb4 | ray z × zoom (focal) |
+| 2.0 (f64) | 0x497bbc | fall time `sqrt(2h/g)` |
+| 2.5 | `0x40200000` | fall time on a miss |
+| 1000.0 | `0x447a0000` | ray length factor |
+| 999 | `0x3e7` | fire latch |
+| 10, 1.0 | code | max bombs, refill period (s) |
+| 10000 | `0x2710` | `XE` health kept while riding |
+| 900, 0x81, 0x818a6 | code | bomb life (ticks), kind, flags |
+| 45, −90 | 0x496ad8 (f32), 0x496ad0 (f64) | bomb nose-down rate °/s, limit |
+| 150 / 75, 40 | 0x43deac | bomb blast objects+groups / Kurt, radius |
+| 2.0 | `0x40000000` | explosion scale |
+| `"%d"`, `"XBN_BOMB"`, `"DROP"` | 0x497b7c, 0x497b80, 0x49758c | |
+| 300, 180 / 472, 56 | 0x46be98 | `BOMBTARG` / count position |
+
+#### Open questions ❓
+
+- Physical keys behind `0x57eb30…3c` (assumed left/right/forward/back).
+- Mouse units of `0x57eb24/28` (raw counts per frame?).
+- `X_STRIKE` is accepted as a ride but no script makes it rideable.
+- What is visible with `0x574304 = −1` if the ground doesn't cover the view (stale frame?).
+- Kurt's death while riding: he's dropped in mid-air by the death script; how the death states
+  play from there wasn't followed.
 
 ## The fall (state 2, `fall_3d.c`)
 

@@ -30,6 +30,7 @@ var _blink := 0
 var _bar_fill := Color()
 var _bar_frame := Color()
 var _sniper := SniperOverlay.new()
+var _bomber := BomberOverlay.new()
 
 
 func setup(p_kurt: Kurt, sprites: MDKBni, palette: MDKPalette, fti: MDKFti) -> void:
@@ -45,6 +46,7 @@ func setup(p_kurt: Kurt, sprites: MDKBni, palette: MDKPalette, fti: MDKFti) -> v
 	_digits = _make_texture(digits, palette)
 	_digit_height = digits.height
 	_sniper.setup(sprites, palette, self)
+	_bomber.setup(sprites, palette)
 	var pickups := sprites.get_animation("PICKUPS")
 	for i in pickups.frame_count:
 		_icons.push_back(_make_texture(pickups.get_frame(i), palette))
@@ -129,6 +131,9 @@ func _draw() -> void:
 	if kurt.health > 20 or _blink < 16:
 		var center := panel_position + Vector2(_panel.get_width() >> 1, (_panel.get_height() - _digit_height) >> 1)
 		_draw_number(kurt.health, center)
+	if scripts and scripts.rides and scripts.rides.bomber:
+		# The 600×360 view, centred in a wider window.
+		_bomber.draw(self, scripts.rides.bomber, messages.big_font, Vector2((view.x - HUDMessages.VIEW_WIDTH) / 2.0, 0.0))
 	if _inventory_ticks > 0:
 		_draw_inventory()
 	if scripts:

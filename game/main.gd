@@ -33,7 +33,15 @@
 ##   --pause                   Open the pause menu after the delay.
 ##   --loading-screen=path.png Save a screenshot of the loading screen and quit.
 ##   --event=N                 Run `special_event` N after the delay (cutscenes, end of level).
+##   --bomber[=drop]           LEVEL7: hits the comm device of `DANT_5` after the delay, waits for
+##                             the `XE` it calls to be rideable and drops Kurt onto it (`drop`:
+##                             then a bomb once the controls are unlocked).
 extends Node3D
+
+## `--bomber`: the arena of the `XE` ride and the comm device that calls it.
+const BOMBER_ARENA := "DANT_5"
+const BOMBER_CALL_GROUP := 16
+const BOMBER_CALL_DELAY := 1.0
 
 @onready var level: Level = $Level
 @onready var kurt: Kurt = $Kurt
@@ -180,6 +188,10 @@ func _ready() -> void:
 		get_node(^"PauseMenu")._open()
 	if args.has("event"):
 		scripts.special_event(scripts.get_arena_state(scripts.current_arena).controller, int(args.event))
+	if args.has("bomber"):
+		await _board_bomber()
+		if args.bomber == "drop":
+			await _drop_bomb()
 	if args.has("use"):
 		Input.action_press(&"item_use")
 		await get_tree().create_timer(0.1).timeout
@@ -194,6 +206,32 @@ func _ready() -> void:
 		Args.screenshot_and_quit(get_tree(), args.screenshot, 20)
 	if args.has("profile"):
 		_profile(float(args.profile))
+
+
+## Test of the `XE` ride: the comm device's hit calls the `XE`; once it waits to be ridden, Kurt
+## falls onto it.
+func _board_bomber() -> void:
+	# The teleport into `DANT_5` settles first.
+	await get_tree().create_timer(BOMBER_CALL_DELAY).timeout
+	scripts.hit_group(BOMBER_ARENA, BOMBER_CALL_GROUP, 1, MDKScriptRuntime.HIT_CHAIN_GUN, 0)
+	var xe: MDKObject
+	while not xe:
+		await get_tree().physics_frame
+		for obj in scripts.objects:
+			if obj.type_name == "XE" and obj.flags & MDKRides.FLAG_RIDEABLE:
+				xe = obj
+	var top := scripts.get_world_bounds(xe).end.z
+	kurt.teleport(MDKMeshBuilder.to_godot(Vector3(xe.mdk_position.x, xe.mdk_position.y, top + 1.0)), kurt.yaw)
+
+
+## Presses fire for a tick once the script unlocks the `XE`'s controls.
+func _drop_bomb() -> void:
+	while not scripts.rides.bomber or scripts.rides.bomber.is_locked():
+		await get_tree().physics_frame
+	Input.action_press(&"fire")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	Input.action_release(&"fire")
 
 
 ## Prints every arena surface above and below an MDK point x,y (tests of the floors).
@@ -284,6 +322,9 @@ func _profile(seconds: float) -> void:
 	print("solid for Kurt: %s" % ", ".join(scripts.level.solid_arenas))
 	if scripts.rides and scripts.rides.ridden:
 		print("riding %s" % scripts.rides.ridden.type_name)
+	if scripts.rides and scripts.rides.bomber:
+		var bomber := scripts.rides.bomber
+		print("bomber view %.1f, locked %s, bombs %d" % [bomber.camera_height, bomber.is_locked(), bomber.bombs])
 	print("per frame: process %.1f ms, physics %.1f ms, draw calls %d; script tick %.2f ms" % [
 			process_ms / frames, physics_ms / frames,
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), scripts.average_tick_ms()])
