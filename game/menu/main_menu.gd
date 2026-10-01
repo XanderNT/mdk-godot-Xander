@@ -35,7 +35,7 @@ func _ready() -> void:
 		GameState.level = int(args.fall)
 		get_tree().change_scene_to_file.call_deferred("res://game/fall/fall.tscn")
 		return
-	if args.has("level") or args.has("viewer") or args.has("models") or (args.has("screenshot") and not args.has("menu")):
+	if args.has("level") or args.has("load") or args.has("viewer") or args.has("models") or (args.has("screenshot") and not args.has("menu")):
 		get_tree().change_scene_to_file.call_deferred("res://game/main.tscn")
 		return
 

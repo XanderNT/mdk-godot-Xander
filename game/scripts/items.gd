@@ -41,6 +41,17 @@ var decoy: MDKObject
 var twisters: Array[MDKTwister] = []
 
 
+## The bomb and the decoy for a full save, with `encode` (`MDKSnapshot.encode`); twisters aren't
+## saved.
+func snapshot(encode: Callable) -> Dictionary:
+	return {bomb = encode.call(bomb), decoy = encode.call(decoy)}
+
+
+func restore(data: Dictionary, decode: Callable) -> void:
+	bomb = decode.call(data.bomb)
+	decoy = decode.call(data.decoy)
+
+
 ## An item that goes before it's done (its arena put away): the bomb or the decoy isn't out any more.
 func forget(obj: MDKObject) -> void:
 	if obj == bomb:

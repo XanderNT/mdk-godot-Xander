@@ -1,7 +1,8 @@
 ## The save prompt after a level (0x42b520(1), each frame 0x42b75c): `SV_ASK` "Save Game?" with
 ## `ABORT2` "Yes" and `ABORT3` "No", then `SV_TITLE` "Name for Saved Game" with the name typed
 ## below it (up to 8 letters, digits, `_` and `$`), preset to the next level's number. Enter
-## saves, Esc gives up. Drawn in `FONTBIG` on the 600×360 view.
+## saves, Esc gives up. Drawn in `FONTBIG` on the 600×360 view. F2's full save (0x42b520(0))
+## asks the name at once.
 ##
 ##   Save Game?        y 139
 ##       Yes           y 175   the selected line grows from 65 % to full size in 5 ticks
@@ -42,14 +43,18 @@ var _grow := 0.0
 var _name := ""
 var _cursor := 0
 var _ticks := 0.0
+var _level_state := {}
 
 
-## Opens the prompt; `kind` is the save's kind (`GameState.KIND_*`), `default_name` the name offered.
-func open(fti: MDKFti, kind: int, default_name: String) -> void:
+## Opens the prompt; `kind` is the save's kind (`GameState.KIND_*`), `default_name` the name offered,
+## `level_state` a full snapshot's state (see `GameState.save_game`).
+func open(fti: MDKFti, kind: int, default_name: String, level_state := {}) -> void:
 	_fti = fti
 	var system := MDKPalette.from_rgb(fti.get_bytes("SYS_PAL").slice(0, 768))
 	_font = MDKFont.load_font(fti, "FONTBIG", system, 6)
 	_kind = kind
+	_level_state = level_state
+	_stage = Stage.NAME if kind == GameState.KIND_SNAPSHOT else Stage.ASK
 	_name = default_name.left(NAME_LENGTH)
 	_cursor = _name.length()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -148,7 +153,7 @@ func _type(c: String) -> void:
 func _save() -> void:
 	if _name.is_empty():
 		return
-	if GameState.save_game(_name, _kind):
+	if GameState.save_game(_name, _kind, _level_state):
 		_close()
 
 

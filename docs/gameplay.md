@@ -2075,7 +2075,19 @@ then:
 - **In the port** (`GameState`, `SavePrompt`): light saves as JSON in `user://saves/<NAME>.sav`,
   `LASTGAME` on death with "Continue" in the menu, the "Saved Game" list, and the prompt after the
   Score-O-matic and after the Gunter stream (drawn on black). A type 6 save shows the briefing and
-  the fall first. The F2 snapshot isn't done.
+  the fall first.
+- **Full saves in the port** (F2, type 1003): the game stops and asks the name at once (offering
+  the level's number ❓ what the original offers); the JSON save holds the level state as base64
+  of `var_to_bytes` (floats stay exact). Each part saves itself: `MDKScriptRuntime.snapshot` (its
+  globals, each arena's state with its controller and hit-script objects, every object's script
+  variables through `MDKSnapshot`, which turns references into indices), `Level.snapshot_groups`
+  (triangle groups' flags and textures), `MDKFans`, `MDKItems` (the bomb and the decoy) and
+  `Kurt.snapshot` (place, health, pickups, clip). Loading recreates the objects from their type
+  (or as boxes), sets their variables, and the scripts carry on where they were; Kurt stands
+  still. Not saved: effects, debris, twisters, sniper rounds in flight, playing sounds (loops
+  restart), the camera. F2 does nothing in a cutscene, at the end of the level, with a strike out,
+  riding, sniping or dead. Test `tests/snapshot_test.sh` (`--snapshot=NAME`, `--load=NAME`): the
+  state taken again right after loading has the same hash.
 
 ## The minecrawler's timer (0x4240c4)
 

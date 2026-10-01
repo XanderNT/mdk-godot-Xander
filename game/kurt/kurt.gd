@@ -304,6 +304,22 @@ func stop_firing() -> void:
 	muzzle.visible = false
 
 
+## Kurt for a full save (the original's `DAMP` and `PLAY`): where he is, his health and pickups.
+## He comes back standing still.
+func snapshot() -> Dictionary:
+	return {position = global_position, yaw = yaw, health = health, invulnerable = invulnerable,
+			clip_rounds = clip_rounds, clip_time = clip_time, inventory = inventory.snapshot()}
+
+
+func restore(data: Dictionary) -> void:
+	teleport(data.position, data.yaw)
+	health = data.health
+	invulnerable = data.invulnerable
+	clip_rounds = data.clip_rounds
+	clip_time = data.clip_time
+	inventory.restore(data.inventory)
+
+
 func teleport(p_position: Vector3, p_yaw: float) -> void:
 	global_position = p_position
 	yaw = p_yaw

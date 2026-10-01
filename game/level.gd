@@ -22,6 +22,8 @@ class TriangleGroup:
 	var shape: CollisionShape3D
 	## `TRIANGLE_HIDDEN` and `TRIANGLE_NOT_SOLID`.
 	var flags := 0
+	## The material every triangle got from `group_set_texture`, if any.
+	var texture: Variant = null
 	## Centres of the triangles (MDK coordinates), computed when a blast needs them.
 	var centers := PackedVector3Array()
 
@@ -243,7 +245,37 @@ func hide_triangles(arena_name: String, triangles: PackedInt32Array, rebuild: bo
 func set_group_texture(arena_name: String, group_number: int, value: int) -> void:
 	var group: TriangleGroup = arena_groups.get(arena_name, {}).get(group_number)
 	if group and group_number != 0:
+		group.texture = value
 		group.mesh.mesh = MDKMeshBuilder.build_arena_mesh(_arenas[arena_name], _resolvers[arena_name], group.triangles, value)
+
+
+## The groups scripts changed, for a full save: arena → group → [flags, texture or null].
+func snapshot_groups() -> Dictionary:
+	var data := {}
+	for arena_name: String in arena_groups:
+		for group_number: int in arena_groups[arena_name]:
+			var group: TriangleGroup = arena_groups[arena_name][group_number]
+			if group.flags == 0 and group.texture == null:
+				continue
+			if not data.has(arena_name):
+				data[arena_name] = {}
+			data[arena_name][group_number] = [group.flags, group.texture]
+	return data
+
+
+## Puts the groups of a full save back.
+func restore_groups(data: Dictionary) -> void:
+	for arena_name: String in data:
+		for group_number: int in data[arena_name]:
+			var group: TriangleGroup = arena_groups.get(arena_name, {}).get(group_number)
+			if not group:
+				continue
+			var entry: Array = data[arena_name][group_number]
+			if entry[1] != null:
+				set_group_texture(arena_name, group_number, entry[1])
+			group.flags = entry[0]
+			group.mesh.visible = not group.flags & TRIANGLE_HIDDEN
+			group.shape.set_deferred(&"disabled", group.flags & TRIANGLE_NOT_SOLID != 0)
 
 
 ## Returns the group of the arena floor below `position` (Godot coordinates), or 0.

@@ -122,6 +122,25 @@ func _use_instant(index: int, kurt: Kurt) -> String:
 
 
 ## Removes the super chain gun slot once its time has run out.
+## The pickups for a full save.
+func snapshot() -> Dictionary:
+	return {slots = slots.map(func(slot: Slot) -> Array: return [slot.item, slot.count]), selected = selected,
+			ammo = ammo.duplicate(), selected_ammo = selected_ammo, super_chain_gun = super_chain_gun}
+
+
+func restore(data: Dictionary) -> void:
+	slots.clear()
+	for entry: Array in data.slots:
+		var slot := Slot.new()
+		slot.item = entry[0]
+		slot.count = entry[1]
+		slots.push_back(slot)
+	selected = data.selected
+	ammo = data.ammo.duplicate()
+	selected_ammo = data.selected_ammo
+	super_chain_gun = data.super_chain_gun
+
+
 func tick_super_chain_gun(ticks: int) -> void:
 	if super_chain_gun <= 0:
 		return

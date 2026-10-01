@@ -1,8 +1,9 @@
 ## Global game state shared between scenes, and the saved games.
 ##
-## The port keeps the original's light saves (see docs/gameplay.md, "Saving and loading"): a level,
-## its kind (3 = at the level's entry point, 6 = before the level), the health and the deaths, in
-## `user://saves/<NAME>.sav` (JSON). Dying writes `LASTGAME` and goes back to the main menu, whose
+## The port keeps the original's saves (see docs/gameplay.md, "Saving and loading"): a level, its
+## kind (3 = at the level's entry point, 6 = before the level, 1003 = a full snapshot, F2), the
+## health and the deaths, in `user://saves/<NAME>.sav` (JSON; a snapshot's level state is in it
+## as base64 of `var_to_bytes`, which keeps floats exact). Dying writes `LASTGAME` and goes back to the main menu, whose
 ## "Continue" starts the level again; `LASTGAME` only lasts for the session.
 extends Node
 
@@ -10,6 +11,7 @@ const SAVE_DIR := "user://saves"
 const LAST_GAME := "LASTGAME"
 const KIND_LEVEL_START := 3
 const KIND_BEFORE_LEVEL := 6
+const KIND_SNAPSHOT := 1003
 ## The order the levels are played in (`0x490030`): the level index (`0x574268`, 0–5) picks the
 ## `TRAVERSE/LEVELn` directory. Gunter's level, LEVEL5, is the last.
 const ORDER := [7, 6, 3, 4, 8, 5]
@@ -28,6 +30,8 @@ var strike_used := false
 var stats := {}
 ## What the fall hands on to the level (`MDKFall`): `health` and `inventory` (a `KurtInventory`).
 var carry := {}
+## The level state of a full save being loaded (`MDKScriptRuntime.snapshot`, `Kurt.snapshot`).
+var snapshot := {}
 ## The town flags at the end of the level (`0x57440f`), for the debriefing.
 var town_flags := 0
 ## The object types that count as enemies (`0x491c38`).
@@ -47,13 +51,18 @@ static func _path(save_name: String) -> String:
 	return "%s/%s.sav" % [SAVE_DIR, save_name]
 
 
-## Saves the current level (a light save).
-func save_game(save_name: String, kind := KIND_LEVEL_START) -> bool:
+## Saves the current level: a light save, or with `level_state` (`{kurt, level}`) a full snapshot.
+func save_game(save_name: String, kind := KIND_LEVEL_START, level_state := {}) -> bool:
 	var file := FileAccess.open(_path(save_name), FileAccess.WRITE)
 	if not file:
 		return false
-	file.store_string(JSON.stringify({"type": kind, "level": level, "health": 100, "deaths": deaths,
-			"strike_used": strike_used, "time": Time.get_datetime_string_from_system()}))
+	var data := {"type": kind, "level": level, "health": 100, "deaths": deaths, "strike_used": strike_used,
+			"time": Time.get_datetime_string_from_system()}
+	if not level_state.is_empty():
+		data.health = level_state.kurt.health
+		data.strike_used = level_state.level.strike_used
+		data.snapshot = Marshalls.variant_to_base64(level_state)
+	file.store_string(JSON.stringify(data))
 	return true
 
 
@@ -67,7 +76,7 @@ func read_game(save_name: String) -> Dictionary:
 	return data
 
 
-## Loads a saved game: the level starts again from its beginning. Returns false when it's invalid.
+## Loads a saved game: the level starts again from its beginning, or as a full snapshot left it. Returns false when it's invalid.
 func load_game(save_name: String) -> bool:
 	var data := read_game(save_name)
 	if data.is_empty():
@@ -75,6 +84,12 @@ func load_game(save_name: String) -> bool:
 	level = int(data.level)
 	deaths = int(data.get("deaths", 0))
 	strike_used = bool(data.get("strike_used", false))
+	snapshot = {}
+	if int(data.get("type", KIND_LEVEL_START)) == KIND_SNAPSHOT:
+		var state: Variant = Marshalls.base64_to_variant(str(data.get("snapshot", "")))
+		if not state is Dictionary:
+			return false
+		snapshot = state
 	return true
 
 

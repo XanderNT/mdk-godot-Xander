@@ -83,6 +83,29 @@ func enable(arena: String, fan_name: String, enabled: bool) -> void:
 			fan.particles.emitting = fan.mask & (MASK_KURT | MASK_OBJECTS) != 0
 
 
+## The fans for a full save.
+func snapshot() -> Array[Dictionary]:
+	var data: Array[Dictionary] = []
+	for fan in _fans:
+		data.push_back({name = fan.name, arena = fan.arena, hotspot = fan.hotspot, param = fan.param, type = fan.type,
+				strength = fan.strength, mask = fan.mask})
+	return data
+
+
+## Creates the fans of a full save again.
+func restore(data: Array) -> void:
+	clear()
+	for entry: Dictionary in data:
+		create(entry.arena, entry.hotspot, entry.name, entry.param, entry.type, entry.strength)
+		var fan: Fan = _fans.back() if not _fans.is_empty() else null
+		if not fan or fan.name != entry.name:
+			continue
+		# The strength as it was, not as `create` works it out from the box.
+		fan.strength = entry.strength
+		fan.mask = entry.mask
+		fan.particles.emitting = fan.mask & (MASK_KURT | MASK_OBJECTS) != 0
+
+
 func clear() -> void:
 	for fan in _fans:
 		fan.particles.queue_free()

@@ -33,6 +33,10 @@
 ##   --pause                   Open the pause menu after the delay.
 ##   --loading-screen=path.png Save a screenshot of the loading screen and quit.
 ##   --event=N                 Run `special_event` N after the delay (cutscenes, end of level).
+##   --snapshot=NAME           After the delay (and the walk), make a full save as F2 does, print
+##                             its hash and quit.
+##   --load=NAME               Load a saved game (a full save comes back as it was; its hash is
+##                             printed).
 ##   --bomber[=drop]           LEVEL7: hits the comm device of `DANT_5` after the delay, waits for
 ##                             the `XE` it calls to be rideable and drops Kurt onto it (`drop`:
 ##                             then a bomb once the controls are unlocked).
@@ -42,6 +46,10 @@ extends Node3D
 const BOMBER_ARENA := "DANT_5"
 const BOMBER_CALL_GROUP := 16
 const BOMBER_CALL_DELAY := 1.0
+## F2 makes a full save (0x42b520(0)), offering the level's number as its name.
+const SNAPSHOT_KEY := KEY_F2
+## The name prompt is drawn over the HUD and the pause menu.
+const SNAPSHOT_LAYER := 20
 
 @onready var level: Level = $Level
 @onready var kurt: Kurt = $Kurt
@@ -58,6 +66,8 @@ func _ready() -> void:
 	if args.has("models"):
 		get_tree().change_scene_to_file.call_deferred("res://game/model_viewer.tscn")
 		return
+	if args.has("load"):
+		GameState.load_game(args.load)
 	# The loading screen shows while the level loads (the game is paused meanwhile).
 	var level_number := int(args.get("level", str(GameState.level)))
 	var loading := LoadingScreen.new()
@@ -122,6 +132,8 @@ func _ready() -> void:
 		# The music goes on during the full-screen strike.
 		scripts.strike_scene.connect(func(active: bool) -> void:
 			$LevelAudio.process_mode = Node.PROCESS_MODE_ALWAYS if active else Node.PROCESS_MODE_INHERIT)
+		if not GameState.snapshot.is_empty():
+			_restore_snapshot()
 		if args.has("town"):
 			scripts.town_ticks = roundi(float(args.town) * 30.0)
 		if args.has("shatter"):
@@ -202,6 +214,12 @@ func _ready() -> void:
 		Input.action_release(&"move_forward")
 	if args.has("wait"):
 		await get_tree().create_timer(float(args.wait)).timeout
+	if args.has("snapshot"):
+		var state := _capture()
+		GameState.save_game(args.snapshot, GameState.KIND_SNAPSHOT, state)
+		print("snapshot hash %d, objects %d" % [var_to_str(state).hash(), scripts.objects.size()])
+		get_tree().quit()
+		return
 	if args.has("screenshot"):
 		Args.screenshot_and_quit(get_tree(), args.screenshot, 20)
 	if args.has("profile"):
@@ -290,6 +308,42 @@ func _on_kurt_died() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == SNAPSHOT_KEY:
+		_ask_snapshot()
+
+
+## The level and Kurt for a full save (the save's header names this level).
+func _capture() -> Dictionary:
+	GameState.level = level.number
+	return {kurt = kurt.snapshot(), level = scripts.snapshot()}
+
+
+## A full save loaded from the menu: the level and Kurt as they were.
+func _restore_snapshot() -> void:
+	scripts.restore(GameState.snapshot.level)
+	kurt.restore(GameState.snapshot.kurt)
+	GameState.snapshot = {}
+	print("restored hash %d, objects %d" % [var_to_str(_capture()).hash(), scripts.objects.size()])
+
+
+## F2: the game stops and the name is asked (on black); Enter saves the level as it was.
+func _ask_snapshot() -> void:
+	if get_tree().paused or not scripts.vm or not scripts.can_snapshot() or kurt.sniping:
+		return
+	var state := _capture()
+	get_tree().paused = true
+	var layer := CanvasLayer.new()
+	layer.layer = SNAPSHOT_LAYER
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	var prompt := SavePrompt.new()
+	layer.add_child(prompt)
+	prompt.open(MDKFti.load_file(MDKData.path("MISC/MDKFONT.FTI")), GameState.KIND_SNAPSHOT,
+			str(GameState.index_of(level.number) + 1), state)
+	await prompt.closed
+	layer.queue_free()
+	get_tree().paused = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _process(_delta: float) -> void:

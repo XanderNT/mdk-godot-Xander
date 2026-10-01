@@ -1801,6 +1801,10 @@ func get_arena_objects(obj: MDKObject) -> Array[MDKObject]:
 	return out
 
 
+## Animations stored in the CMI file are named after their offset (`CMI_1a2b`).
+const CMI_ANIMATION_PREFIX := "CMI_"
+
+
 ## Returns the animation referenced by a script operand: an animation stored in the CMI file, or
 ## (when its first `u32` is 0) the arena animation named after it.
 func get_animation(obj: MDKObject, offset: int) -> MDKModelAnimation:
@@ -1810,7 +1814,7 @@ func get_animation(obj: MDKObject, offset: int) -> MDKModelAnimation:
 	if bytes.decode_u32(offset) == 0:
 		return find_arena_animation(obj.arena, bytes.slice(offset + 4, offset + 12).get_string_from_ascii())
 	if not _animations.has(offset):
-		_animations[offset] = MDKModelAnimation.parse("CMI_%x" % offset, bytes, offset)
+		_animations[offset] = MDKModelAnimation.parse(CMI_ANIMATION_PREFIX + "%x" % offset, bytes, offset)
 	return _animations[offset]
 
 
@@ -1883,3 +1887,149 @@ func play_sound(obj: MDKObject, sound_name: String, flags: int, position: Varian
 	if flags & 4:
 		obj.tracked_sound = sound_name
 		obj.tracked_voice = voice
+
+
+# Full saves (F2): see `MDKSnapshot` and docs/gameplay.md, "Saving and loading".
+
+## The runtime's own variables in a full save.
+const SNAPSHOT_FIELDS := ["global_variables", "global_flags", "alarm_ticks", "sky_mode", "option", "town_ticks",
+		"current_arena", "second_arena", "second_active", "_next_instance", "camera_track_pitch",
+		"camera_track_ticks", "shatter_point", "shatter_direction"]
+## The arena state's variables in a full save, besides its two script objects.
+const ARENA_FIELDS := ["variables", "flags", "started", "group_hit_flags", "group_hit_masks", "group_hit_scripts",
+		"group_counters"]
+const CONTROLLER_KEY := "arena:"
+const HIT_SCRIPTS_KEY := "hits:"
+
+
+## Whether a full save may be made now (0x42b520(0)): no cutscene, the level not over, no strike
+## out; the port also needs Kurt alive and not riding.
+func can_snapshot() -> bool:
+	return cutscene == 0 and not level_over and not end_level and not air_strike.is_active() and not rides.ridden \
+			and kurt.health > 0 and not current_arena.is_empty()
+
+
+## The level's state for a full save: this runtime, the arenas, the objects, the fans, the items
+## and the triangle groups (Kurt is saved by `Kurt.snapshot`).
+func snapshot() -> Dictionary:
+	var packer := MDKSnapshot.new(objects, _fixed_objects(), find_animation_named)
+	var data := {}
+	for field: String in SNAPSHOT_FIELDS:
+		data[field] = packer.encode(get(field))
+	data.alien_target = packer.encode(alien_target)
+	data.strike_used = air_strike.used_up
+	data.stats = GameState.stats.duplicate()
+
+	var arenas := {}
+	for arena_name: String in _arenas:
+		var state: ArenaState = _arenas[arena_name]
+		var entry := {}
+		for field: String in ARENA_FIELDS:
+			entry[field] = state.get(field)
+		entry.controller = packer.pack(state.controller)
+		entry.hit_scripts = packer.pack(state.hit_scripts)
+		arenas[arena_name] = entry
+	data.arenas = arenas
+
+	var packed: Array[Dictionary] = []
+	for obj in objects:
+		var entry := {type = obj.type_name, arena = obj.arena, variables = packer.pack(obj)}
+		if obj.model and _is_box(obj):
+			entry.box = obj.model.bounds.size
+		packed.push_back(entry)
+	data.objects = packed
+	data.fans = fans.snapshot()
+	data.items = items.snapshot(packer.encode)
+	data.groups = level.snapshot_groups()
+	return data
+
+
+## Puts the level back as `snapshot` left it, before the first tick (objects are created again,
+## their scripts carry on where they were).
+func restore(data: Dictionary) -> void:
+	# The arenas' script objects exist first, so references to them resolve.
+	for arena_name: String in data.arenas:
+		get_arena_state(arena_name)
+
+	# The objects first, so that references between them can be resolved.
+	var created: Array[MDKObject] = []
+	for entry: Dictionary in data.objects:
+		created.push_back(_recreate(entry))
+	objects.assign(created.filter(func(obj: MDKObject) -> bool: return obj != null))
+	var packer := MDKSnapshot.new(created, _fixed_objects(), find_animation_named)
+
+	for field: String in SNAPSHOT_FIELDS:
+		set(field, packer.decode(data[field], null))
+	alien_target = packer.decode(data.alien_target, null)
+	air_strike.used_up = data.strike_used
+	GameState.stats = data.stats.duplicate()
+
+	for arena_name: String in data.arenas:
+		var entry: Dictionary = data.arenas[arena_name]
+		var state := get_arena_state(arena_name)
+		for field: String in ARENA_FIELDS:
+			var value: Variant = entry[field]
+			if value is Array:
+				(state.get(field) as Array).assign(value)
+			else:
+				state.set(field, value)
+		packer.unpack(state.controller, entry.controller)
+		packer.unpack(state.hit_scripts, entry.hit_scripts)
+
+	for i in created.size():
+		var obj := created[i]
+		if not obj:
+			continue
+		packer.unpack(obj, data.objects[i].variables)
+		obj.update_transform()
+	fans.restore(data.fans)
+	items.restore(data.items, packer.decode.bind(null))
+	level.restore_groups(data.groups)
+	# An arena reached by a teleport is shown and solid again.
+	level.enter_arena(current_arena)
+	if not second_arena.is_empty():
+		level.enter_arena(second_arena)
+
+
+## The arenas' script objects, by key, for references in full saves.
+func _fixed_objects() -> Dictionary:
+	var fixed := {}
+	for arena_name: String in _arenas:
+		var state: ArenaState = _arenas[arena_name]
+		fixed[CONTROLLER_KEY + arena_name] = state.controller
+		fixed[HIT_SCRIPTS_KEY + arena_name] = state.hit_scripts
+	return fixed
+
+
+## An object of a full save, without its variables yet (null when its model is gone).
+func _recreate(entry: Dictionary) -> MDKObject:
+	var controller := get_arena_state(entry.arena).controller
+	if entry.has("box"):
+		var box := spawn_box(controller, Vector3.ZERO, entry.box, entry.type, 0)
+		objects.erase(box)
+		return box
+	var model := find_model(entry.arena, entry.type)
+	if not model:
+		return null
+	var obj := MDKObject.new()
+	obj.arena = entry.arena
+	obj.setup(entry.type, model, get_resolver(entry.arena))
+	add_child(obj)
+	return obj
+
+
+## Whether an object was made by `spawn_box` (it shows its texture as a sprite).
+func _is_box(obj: MDKObject) -> bool:
+	for child in obj.get_children():
+		if child is Sprite3D:
+			return true
+	return false
+
+
+## An animation by its name (`MDKModelAnimation.name`): one stored in the CMI (`CMI_<offset>`), one
+## of the arena's models, or one of the items.
+func find_animation_named(obj: MDKObject, animation_name: String) -> MDKModelAnimation:
+	if animation_name.begins_with(CMI_ANIMATION_PREFIX):
+		return get_animation(obj, animation_name.trim_prefix(CMI_ANIMATION_PREFIX).hex_to_int())
+	var animation := find_arena_animation(obj.arena, animation_name) if obj else null
+	return animation if animation else items.get_animation(animation_name)
