@@ -93,6 +93,10 @@ rate = 0.75u + 0.25 up to u = 1, then 0.25u + 0.75. It plays backwards when back
 - Planes with |nz| < 0.75 are walls: the steepest walkable slope is about 41°.
 - Near arena borders, the neighboring arena is also tested. Objects are tested with segment versus
   bounding box.
+- Arenas swept: Kurt's and the active second one (`0x573a6c`), not the second while on the
+  snowboard (see [engine.md](engine.md), the table of what runs where). The port puts every arena
+  on the ray layer and only these on Kurt's layer (`Level.set_solid_arenas`, test
+  `tests/kurt_arenas_test.sh`; `--profile` prints them).
 - Conveyor belts (`conveyor_push`) add their velocity, depending on the floor triangle's material.
 
 ## Firing

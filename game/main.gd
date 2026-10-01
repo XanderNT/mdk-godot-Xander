@@ -281,6 +281,7 @@ func _profile(seconds: float) -> void:
 		physics_ms += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
 	print("FPS %.1f (slowest frame %d ms), objects %d, arena %s, second %s%s" % [frames / seconds, slowest, scripts.objects.size(),
 			scripts.current_arena, scripts.second_arena, " (active)" if scripts.second_active else ""])
+	print("solid for Kurt: %s" % ", ".join(scripts.level.solid_arenas))
 	if scripts.rides and scripts.rides.ridden:
 		print("riding %s" % scripts.rides.ridden.type_name)
 	print("per frame: process %.1f ms, physics %.1f ms, draw calls %d; script tick %.2f ms" % [

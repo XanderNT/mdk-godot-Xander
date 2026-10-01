@@ -16,7 +16,8 @@
 - Object movement like the original: spline paths, walking, flying, chasing, formations,
   projectiles, gravity, friction and collisions with the arena.
 - Doors (connectors), pickups falling with chutes, arena triangle groups (hidden/non-solid parts),
-  Kurt colliding with objects and carried by platforms.
+  Kurt colliding with objects and carried by platforms, and with only his and the active second
+  arena.
 - Kurt's chain gun: firing animations and sound, auto-aimed hits, weak parts, hit events, deaths
   and explosions; the super chain gun.
 - Pickups and the inventory, health, damage and death, the HUD (health and inventory).
@@ -65,8 +66,6 @@
 
 ## Next
 
-1. **Aliens and scripts**: Kurt colliding with only his and the second arena (needs his arena
-   picked by crossing connections, as the original).
 3. **Sound**: the sound options' `OPTSONG`.
 6. **Rides**: the `XE` bomber ride (0x46bf40), the camera roll on the board.
 4. **Movement details**: slippery floors, camera roll, pushing Kurt

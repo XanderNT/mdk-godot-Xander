@@ -8,6 +8,10 @@ const CONNECTION := 6
 ## Triangle flags changed by scripts (`group_set_state`): hidden, and not solid.
 const TRIANGLE_HIDDEN := 0x10
 const TRIANGLE_NOT_SOLID := 0x20
+## Arena collision layers: every arena is on the ray layer; only Kurt's and the active second one
+## are also on Kurt's layer (`damp_collide_move` 0x465e34).
+const RAY_LAYER := 1
+const KURT_LAYER := 8
 
 
 ## The triangles of an arena that share a group number (the top byte of their flags), which scripts
@@ -35,6 +39,8 @@ var arena_bounds := {}
 var arena_pitch := {}
 ## Arena name to its triangle groups (group number to `TriangleGroup`).
 var arena_groups := {}
+## The arenas Kurt collides with (all until `set_solid_arenas`).
+var solid_arenas: Array[String] = []
 
 var _arenas := {}
 ## Arenas Kurt can't walk into: no connection (DTI record type 6) leads there and it isn't the
@@ -134,6 +140,7 @@ func _build_group(arena: MDKArena, root: Node3D, group_number: int, group: Trian
 	body.name = "Collision" + suffix
 	body.set_meta(&"arena", arena.name)
 	body.set_meta(&"group", group_number)
+	body.collision_layer = RAY_LAYER | KURT_LAYER
 	group.shape = CollisionShape3D.new()
 	group.shape.shape = MDKMeshBuilder.build_arena_collision(arena, group.triangles)
 	body.add_child(group.shape)
@@ -283,6 +290,15 @@ func show_arenas(arena_names: Array[String]) -> void:
 	for arena_name: String in arena_bounds:
 		if has_node(arena_name):
 			(get_node(arena_name) as Node3D).visible = arena_name in arena_names
+
+
+## Kurt collides only with these arenas; rays still hit all of them.
+func set_solid_arenas(arena_names: Array[String]) -> void:
+	solid_arenas = arena_names
+	for arena_name: String in arena_groups:
+		var layer := RAY_LAYER | (KURT_LAYER if arena_name in arena_names else 0)
+		for group: TriangleGroup in arena_groups[arena_name].values():
+			(group.shape.get_parent() as StaticBody3D).collision_layer = layer
 
 
 ## The DTI records of an arena (see `MDKDti`).

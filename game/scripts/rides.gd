@@ -50,6 +50,11 @@ func update() -> void:
 		_update_walker()
 
 
+## Whether Kurt rides the snowboard.
+func on_board() -> bool:
+	return _board != null
+
+
 ## Whether hits on Kurt go to the object he rides (the `XD2`).
 func takes_hits() -> bool:
 	return ridden != null and _board == null

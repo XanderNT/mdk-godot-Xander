@@ -330,6 +330,13 @@ func _update_arenas() -> void:
 	if drawn != _drawn_arenas:
 		level.show_arenas(drawn)
 		_drawn_arenas = drawn
+
+	# Kurt collides with the drawn arenas, but not the second one on the snowboard (0x465e34).
+	var solid := drawn.duplicate()
+	if rides.on_board():
+		solid.resize(1)
+	if not current_arena.is_empty() and solid != level.solid_arenas:
+		level.set_solid_arenas(solid)
 	for obj in objects:
 		obj.visible = obj.arena in drawn
 
