@@ -503,8 +503,9 @@ of level 7's `DANT_9`, and the `XE` bomber of level 7's `DANT_5` (0x46bf40).
 `if_is_573c30` (171) tests the ridden object; hits on Kurt go to the `XD2`; standable objects
 (0x800000) are solid for Kurt even when he passes through them otherwise (0x800), so he can land on
 the board. Kurt running into a triangle group of his arena hits it (kind 8, 0x46634e), which is how
-the board breaks the ice walls; the camera rolls with the board's bank (`CameraRoll.follow`). Not
-done: the camera pivot dip during a board jump. Tests: `tests/snowboard_test.sh`.
+the board breaks the ice walls; the camera rolls with the board's bank (`CameraRoll.follow`) and
+its pivot dips during jumps (`MDKSnowboard.jump_pivot`, `Kurt.camera_pivot`, test
+`tests/board_pivot_test.gd`). Tests: `tests/snowboard_test.sh`.
 
 ### The snowboard (`XSNOWB`, 0x46ac4c)
 

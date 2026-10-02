@@ -63,6 +63,8 @@ const RAM_DAMAGE := 5
 ## `K_SURFJ` holds on frame 5 in the air, lands from frame 6 to 10.
 const JUMP_HOLD_FRAME := 5
 const JUMP_LAND_FRAME := 6
+## The camera pivot dips by 0.2 a frame while `K_SURFJ` takes off, then comes back up by 1 u/s.
+const PIVOT_DIP := 0.2
 
 enum Pose { SURF, JUMP, LAND }
 
@@ -323,18 +325,28 @@ func _animate(dt: float) -> void:
 	_frame += dt
 	match _pose:
 		Pose.SURF:
+			_kurt.camera_pivot = Kurt.CAMERA_PIVOT
 			_kurt.show_animation("K_SURF", int(_frame) % 8)
 		Pose.JUMP:
 			_frame = minf(_frame, JUMP_HOLD_FRAME)
 			if _grounded and _kurt.velocity.y <= 0.0:
 				_pose = Pose.LAND if _frame > 3.0 else Pose.SURF
 				_frame = JUMP_LAND_FRAME if _pose == Pose.LAND else 0.0
+			_kurt.camera_pivot = jump_pivot(_frame, _kurt.camera_pivot, dt / TICKS)
 			_kurt.show_animation("K_SURFJ", int(_frame))
 		Pose.LAND:
 			if _frame >= 11.0:
 				_pose = Pose.SURF
 				_frame = 0.0
+			_kurt.camera_pivot = jump_pivot(_frame, _kurt.camera_pivot, dt / TICKS)
 			_kurt.show_animation("K_SURFJ", int(_frame))
+
+
+## The camera pivot at `K_SURFJ` frame `frame` (0x46ac4c), coming from `pivot` after `seconds`.
+static func jump_pivot(frame: float, pivot: float, seconds: float) -> float:
+	if frame < JUMP_HOLD_FRAME:
+		return Kurt.CAMERA_PIVOT - int(frame) * PIVOT_DIP
+	return minf(pivot + seconds, Kurt.CAMERA_PIVOT)
 
 
 ## Getting off (the script clears the rideable flag, or Kurt died): he keeps the board's speeds as
@@ -342,6 +354,7 @@ func _animate(dt: float) -> void:
 func get_off() -> void:
 	for sound_name in ["SKI", "SKITURN", "SKILAND"]:
 		_runtime.mixer.stop(sound_name)
+	_kurt.camera_pivot = Kurt.CAMERA_PIVOT
 	var y := deg_to_rad(rad_to_deg(_kurt.yaw) + 90.0)
 	board.velocity = Vector3(_speed * cos(y) + _side * sin(y), _speed * sin(y) - _side * cos(y), 0.0) * TICKS * 1.1
 	board.velocity.z = _kurt.velocity.y

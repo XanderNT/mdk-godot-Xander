@@ -34,6 +34,9 @@ const WALL_NORMAL := 0.75
 const HEAD_ON_SLIDE := 0.75
 const STEP_HEIGHT := 0.5
 
+## The camera pivot's height above the feet.
+const CAMERA_PIVOT := 4.5
+
 ## Vertical movement (u/s, u/s²).
 const GRAVITY := 64.0
 const MAX_FALL_SPEED := 250.0
@@ -243,6 +246,8 @@ var _zoom_player: AudioStreamPlayer
 var walk_mode := Walk.NORMAL
 ## The camera's roll, set by the movement (`FollowCamera`).
 var camera_roll := CameraRoll.new()
+## Height of the camera's pivot above the feet (`0x573b7c`; the board's jumps lower it).
+var camera_pivot := CAMERA_PIVOT
 ## A ride that moves Kurt instead of his walking (the snowboard, `MDKSnowboard`), called each tick.
 var ride: Callable
 var sliding := false

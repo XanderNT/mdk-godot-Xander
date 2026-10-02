@@ -69,7 +69,12 @@
 
 ## Next
 
-- **Rides**: the camera pivot dip during a board jump.
+1. **Videos**: the menu's `MDK12.FLC`, the end `MDKEND.FLC` and `MDKBZK.MVE` (no FLC/MVE decoder
+   yet).
+2. **Menu**: the original font in the main menu, the gore option (taken as on), the level select.
+3. **Special materials**: mirrors, glass, animated water.
+4. **Small gaps**: doors moved into a newly loaded arena (`spawn_connector`), the fans' fire
+   sparks, the ricochet sound's "pool empty" rule, the `XE` aim ray against objects, sky mode −1.
 
 ## Menu
 

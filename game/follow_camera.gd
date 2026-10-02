@@ -10,7 +10,6 @@ class_name FollowCamera
 extends Camera3D
 
 const DISTANCE := 8.0
-const HEIGHT := 4.5
 const MOUSE_SENSITIVITY := 0.15
 ## Limits of the total pitch, in degrees.
 const MIN_PITCH := -60.0
@@ -118,7 +117,7 @@ func _camera_point(feet: Vector3, pitch: float) -> Vector3:
 	elif pitch < deg_to_rad(-20.0):
 		distance = DISTANCE * (rad_to_deg(pitch) + 100.0) / 80.0
 		back = -distance * cos(pitch)
-	return feet + target.get_facing() * back + Vector3.UP * (HEIGHT + distance * sin(pitch))
+	return feet + target.get_facing() * back + Vector3.UP * (target.camera_pivot + distance * sin(pitch))
 
 
 ## After Kurt moved: what stands between his head and the camera pushes him away (0x417ee8).
