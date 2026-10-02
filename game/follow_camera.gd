@@ -102,7 +102,8 @@ func _process(delta: float) -> void:
 		position = hit.position + (head - position).normalized() * 0.3
 
 	var look := facing * cos(pitch) - Vector3.UP * sin(pitch)
-	var view := Basis.looking_at(look, Vector3.UP)
+	# A positive roll banks the view to the right: its up turns towards its right.
+	var view := Basis.looking_at(look, Vector3.UP) * Basis(Vector3.BACK, -deg_to_rad(target.camera_roll.roll))
 	_update_shake(delta)
 	if _shake_offset != Vector2.ZERO:
 		# Shifting the view by some pixels is turning the camera by as many pixels' worth of angle.

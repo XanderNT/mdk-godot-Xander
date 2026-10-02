@@ -27,6 +27,13 @@ const TURN_FRICTION_FAST := 1.6 * TICKS * TICKS
 const TURN_FRICTION_SLOW := 0.55 * TICKS * TICKS
 const MOUSE_SENSITIVITY := 0.15
 
+## Walls (|normal.y| below 0.75) hit within 30° of head-on stop Kurt: he slides only if
+## (m·n)² ≤ 0.75·|m|² (`damp_collide_move`). His box is swept 0.5 above the feet, so lower steps
+## are climbed.
+const WALL_NORMAL := 0.75
+const HEAD_ON_SLIDE := 0.75
+const STEP_HEIGHT := 0.5
+
 ## Vertical movement (u/s, u/s²).
 const GRAVITY := 64.0
 const MAX_FALL_SPEED := 250.0
@@ -234,6 +241,8 @@ var _breath_player: AudioStreamPlayer
 var _zoom_player: AudioStreamPlayer
 ## How Kurt walks (see `Walk`).
 var walk_mode := Walk.NORMAL
+## The camera's roll, set by the movement (`FollowCamera`).
+var camera_roll := CameraRoll.new()
 ## A ride that moves Kurt instead of his walking (the snowboard, `MDKSnowboard`), called each tick.
 var ride: Callable
 var sliding := false
@@ -409,6 +418,9 @@ func _physics_process(delta: float) -> void:
 		return
 	hurt_flash = maxf(hurt_flash - 4.0 * TICKS * delta, 0.0)
 	white_flash = maxf(white_flash - 4.0 * TICKS * delta, 0.0)
+	# The roll levels out unless last tick's movement set it (one tick late, as every return below
+	# would need it).
+	camera_roll.settle(delta)
 	if ride.is_valid():
 		# No knock-down, chute or ledges while riding.
 		knock_damage = 0.0
@@ -445,6 +457,8 @@ func _physics_process(delta: float) -> void:
 		strafe_input = 0.0
 	var air := 1.0 if on_floor else AIR_CONTROL
 	forward_speed = _accelerate(forward_speed, forward_input, turbo, 1.0, air, delta)
+	# Running while turning with the keys (not the mouse) rolls the view.
+	camera_roll.walk(Input.get_axis(&"turn_left", &"turn_right"), forward_input, delta)
 	strafe_speed = _accelerate(strafe_speed, strafe_input, turbo, air, air, delta)
 	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 	var horizontal := get_facing() * forward_speed + right * strafe_speed
@@ -461,6 +475,7 @@ func _physics_process(delta: float) -> void:
 	_update_vertical(delta, on_floor)
 	_update_inside_bodies()
 	var previous := global_position
+	_stop_head_on(delta)
 	move_and_slide()
 	if _grab_ledge(previous):
 		return
@@ -825,6 +840,9 @@ func _update_slide(delta: float, on_floor: bool) -> void:
 			_set_state(State.FALL)
 			return
 	slide_accel(_slide_push, delta)
+	# The view rolls with the slope across Kurt's way (MDK facing: Godot x, −z).
+	var facing := get_facing()
+	camera_roll.slide(_slide_normal, Vector2(facing.x, -facing.z), delta)
 	# The slide goes where the velocity points, and Kurt faces it.
 	var mdk_yaw := rad_to_deg(yaw) + 90.0
 	if absf(slide_velocity.x) + absf(slide_velocity.y) > 0.5:
@@ -960,6 +978,27 @@ func _update_muzzle() -> void:
 	muzzle.anchor_offset = sprite.anchor_offset - Vector2(offset)
 	muzzle.flip_h = sprite.flip_h
 	muzzle.show_frame(sprites.get_animation("K_MUZZF"), _muzzle_frame)
+
+
+## A wall of the arena ahead within 30° of head-on: Kurt goes up to it and no further this tick
+## (his speeds stay). Godot would let him slide along it.
+func _stop_head_on(delta: float) -> void:
+	var motion := Vector3(velocity.x, 0.0, velocity.z) * delta
+	if motion == Vector3.ZERO:
+		return
+	var collision := KinematicCollision3D.new()
+	if not test_move(global_transform.translated(Vector3.UP * STEP_HEIGHT), motion, collision):
+		return
+	var normal := collision.get_normal()
+	var collider := collision.get_collider() as Node
+	if absf(normal.y) >= WALL_NORMAL or not collider or not collider.has_meta(&"group"):
+		return
+	var into := motion.dot(normal)
+	if into * into <= HEAD_ON_SLIDE * motion.length_squared():
+		return
+	global_position += collision.get_travel()
+	velocity.x = 0.0
+	velocity.z = 0.0
 
 
 ## Keyboard turning accelerates up to a maximum speed; the mouse turns directly.

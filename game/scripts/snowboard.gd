@@ -304,6 +304,7 @@ func _place() -> void:
 	board.yaw = fposmod(_heading + _steer, 360.0)
 	board.pitch = wrapf(_pitch, -180.0, 180.0)
 	board.update_transform()
+	_kurt.camera_roll.follow(wrapf(board.roll, -180.0, 180.0), 1.0 / TICKS)
 
 
 ## Whatever Kurt runs into dies, and he takes 5 damage.
