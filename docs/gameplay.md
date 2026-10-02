@@ -45,12 +45,21 @@ Speeds per tick (× 30 for per second):
 - Pressing the opposite direction resets the speed to one acceleration step (`vel_accel_dt`).
 - Without input, speed decreases by 0.17778 u/tick² above 0.6667 u/tick, and by 0.08889 u/tick²
   below, times 1.0 on a floor, 0.75 in the air, 0.1 on slippery floors (floor triangle flag 0x04).
-  The strafe acceleration uses the same factors (0.5 on slippery floors).
+  The strafe acceleration uses the same factors (0.5 on slippery floors). No triangle of any level
+  has flag 0x04 and no code sets it (only 0x10/0x20 are set at run time), so slippery floors never
+  happen; the port leaves them out.
 - Turning slows down by 1.6 °/tick² above 4 °/tick, 0.55 °/tick² below.
 - Mouse turning sets the turn speed to 3 × clamp(mouse dx / sensitivity / dt, ±4) °/tick.
 - Movement: yaw −= turn × dt; dx = (vf·cos yaw + vs·sin yaw)·dt; dy = (vf·sin yaw − vs·cos yaw)·dt.
-- The camera rolls by up to ±10° while running and turning (±0.25 °/tick), decaying by
-  clamp(0.35·|roll|, 0.05, 2.5) °/tick.
+- The camera rolls (`0x573910`) by ±0.25 °/tick up to ±10° while the forward and turn axes
+  (`0x5014cc`, `0x5014c4`: keys or joystick, not the mouse) are both held and Kurt isn't on a moving
+  platform: forward × right banks right; going the other way first jumps 2° back towards level
+  (`damp_move` 0x467fa4). Otherwise (`0x57ff74` clear) it levels out by
+  clamp(0.35·|roll|, 0.05, 2.5) °/tick (`damp_control`). Sliding sets it to `0.9·roll + 0.1·(90° −
+  slope angle)` each frame, the snowboard moves it towards the board's bank at 45 °/s. The port:
+  `CameraRoll` (test `tests/camera_roll_test.gd`), the view turns about its axis ❓ (the sense of
+  the original's camera roll wasn't checked; positive banks right like an object's roll). The
+  port's moving-platform exception is left out.
 
 ### Vertical (`damp_vertical`, `damp_gravity`)
 
@@ -88,7 +97,8 @@ rate = 0.75u + 0.25 up to u = 1, then 0.25u + 0.75. It plays backwards when back
 - Kurt is an axis-aligned box swept through the arena BSP.
   - Horizontal sweeps: half extents (0.6, 0.6, 2.5) centered at z + 3 (so obstacles lower than
     0.5 u are stepped over); 4 slide iterations; slides only if (m·n)² ≤ 0.75·|m|², so walls within
-    30° of head-on stop him.
+    30° of head-on stop him. The port tests the move 0.5 above the feet against the arena first
+    and stops him at such a wall (`Kurt._stop_head_on`, test `tests/head_on_test.sh`).
   - Vertical sweeps: half extents (0.4, 0.4, 2.5) centered at z + 2.51.
 - Planes with |nz| < 0.75 are walls: the steepest walkable slope is about 41°.
 - Near arena borders, the neighboring arena is also tested. Objects are tested with segment versus
@@ -493,8 +503,8 @@ of level 7's `DANT_9`, and the `XE` bomber of level 7's `DANT_5` (0x46bf40).
 `if_is_573c30` (171) tests the ridden object; hits on Kurt go to the `XD2`; standable objects
 (0x800000) are solid for Kurt even when he passes through them otherwise (0x800), so he can land on
 the board. Kurt running into a triangle group of his arena hits it (kind 8, 0x46634e), which is how
-the board breaks the ice walls. Not done: the camera roll following the board's bank, the camera
-pivot dip during a board jump. Tests: `tests/snowboard_test.sh`.
+the board breaks the ice walls; the camera rolls with the board's bank (`CameraRoll.follow`). Not
+done: the camera pivot dip during a board jump. Tests: `tests/snowboard_test.sh`.
 
 ### The snowboard (`XSNOWB`, 0x46ac4c)
 
@@ -2145,9 +2155,120 @@ Drawn on the 600×360 view after the 3D scene:
 - Position: feet + facing·(5(1 − cos p) − D·cos p) + up·(H + D·sin p) when p > 0; without the
   5(1 − cos p) term otherwise, and with D·(p + 100)/80 below −20°.
 - The camera never gets closer: if a wall is between Kurt's head (z + 5.5) and the camera, Kurt is
-  pushed away from it (`camera_clearance`).
+  pushed away from it (`camera_clearance`, below).
 - Projection: the 3D view is 600 × 360 with a focal length of 250 px: horizontal FOV 100.4°,
   vertical FOV 71.5°.
+
+### `camera_clearance` (0x417ee8)
+
+The original never moves the camera closer. When the arena BSP is between Kurt's head and the
+camera, it moves **Kurt** (with collision) away from the wall and shifts the camera by Kurt's
+actual movement. Distance and pitch are untouched.
+
+#### Call site (`camera_update` 0x4174d0)
+
+```
+camera_update():
+    if !sniper(0x573a60) && topdown(0x490de0): topdown camera (0x4183f0); return   # no clearance
+    ... pitch, sway, D, H → camera point C = 0x5738ec..f4 (feet-relative, see gameplay.md "Camera")
+    ... camera axes 0x5738f8.. / 0x573904..
+    if 0x490db0 != 0 && |0x573b1c| == 0:
+        camera_clearance(&C)          # C is the global camera position, modified in place
+    build view planes from C
+```
+
+- `param_1` = `&0x5738ec`, the camera position just computed for this frame (the desired point),
+  edited in place; the view matrix is built from it afterwards ✅.
+- Skipped when:
+  - top-down camera (`0x490de0`, not in sniper mode): early return ✅;
+  - `0x490db0 == 0`: debug toggle, default 1, flipped by cheat `lchsyamqxrzxj` (0x42c5f0) ✅;
+  - look offset `0x573b1c != 0` (look up/down keys held or returning) ✅.
+- Not skipped: sniper mode (D = 0, eye z + 4: the segment z + 5.5 → z + 4 rarely hits ❓),
+  riding (`0x573c30`), sliding, airborne, cutscenes — no test in either function ✅
+  (`camera_update` is called unconditionally every `game_frame`, 0x41d4d8 ✅).
+- Camera is recomputed from Kurt's position every frame; nothing persists ✅.
+
+#### Pseudo-code
+
+Constants ✅: `0x4940f8` f64 5.5 (eye height), `0x490e20` box half extents (0.1, 0.1, 0.1),
+`0x494100` f32 +4, `0x494104` f32 −4, `0x494108` f64 0.5. `K` = Kurt's feet `0x5739c0/c4/c8`
+(`_g_damp_position`).
+
+```
+camera_clearance(C):
+    E = K + (0, 0, 5.5)                                          # head
+    hit = bsp_sweep_box(E → C, box ±0.1, iterations 0, BSP of Kurt's arena 0x573a0c)
+    if !hit && second(0x573a68) && !streaming(0x573b00):         # 0x573a6c NOT required
+        hit = bsp_sweep_box(E → C, box ±0.1, 0, BSP of 0x573a68)
+    if hit:
+        P    = contact point (box centre at contact, out param)
+        d    = |C.xy − P.xy|                    # FUN_004174ac: 2D distance, EAX=&P, EDX=C
+        pl   = FUN_00409674()                   # = 0x4d4e60, hit plane (nx, ny, nz, dist) of the sweep
+        n    = (pl.nx, pl.ny)                   # NOT renormalised: |n| < 1 on slopes
+        if dot(pl.n, E) + pl.dist < 0: n = −n   # local_48: make n point to Kurt's side
+        push = d · n                            # (local_30, local_2c), horizontal only
+
+        if on_floor(0x573c10 != 0):             # airborne: no floor test
+            # FUN_00421680 = segment vs BSP of Kurt's arena only (returns hit tri or 0)
+            ok(v) = seg(K + (v.x, v.y, +4) → K + (v.x, v.y, −4)) hits
+            side  = 0.5 · d · (n.y, −n.x)       # perpendicular to n
+            if   ok(push):          pass
+            elif ok(push + side):   push += side
+            elif ok(push − side):   push −= side
+            else: return                        # no floor there: no push, object pass skipped too
+
+        K0 = K
+        damp_collide_move(push.x, push.y, 0, 0.75, default box, 0)   # moves K with collision
+        C += K − K0                             # 3D: the camera follows Kurt's real movement
+
+    if 0x573a2c:                                # object collision on (default 1, debug toggle)
+        E = K + (0, 0, 5.5);  T = C             # C already includes the push above
+        for obj in Kurt's arena list (arena+0x68):                     # second arena not tested
+            if obj+6 && obj+8 && !(flags & 0x810) && (flags & 0x1000000):
+                if FUN_0045fa88(E, T, obj bounds +0x198, box 0x490e20):    # broad phase
+                    for part in obj.model(+0xc).parts(+0x20, stride 0x5c, count +0x1c):
+                        if FUN_0045f588(E, T, part box +0x44, &P) == 1: T = P    # clip end
+        K0 = K
+        damp_collide_move(T.x − C.x, T.y − C.y, 0, 0.75, default box, 0)  # always called; 0 if no hit
+        C += K − K0
+```
+
+All lines ✅ except the names of the object fields (meaning taken from engine.md "Flags"; flag
+0x1000000 = "solid for thrown items", the same set the items stop on ✅ / meaning ❓). Part
+visibility (`obj+0x2c8`) is not checked ✅.
+
+#### Answers
+
+1. `param_1` = the freshly computed camera position `0x5738ec` (desired point). Gates: see above.
+2. Sweep: box ±0.1 from Kurt's head (feet + 5.5) to C, no sliding. Kurt's arena first; the
+   second arena only if the first missed, `0x573a68 != 0` and `0x573b00 == 0` (it does not need
+   `0x573a6c`, unlike `damp_collide_move`).
+3. On hit: `d` = horizontal distance contact → desired camera (the part of the view segment past
+   the wall). `0x409674` returns the hit plane pointer `0x4d4e60` (set by `bsp_sweep_node`).
+   The plane normal's XY is flipped toward Kurt's head; push = `d · n.xy`, z = 0. On a floor, the
+   push target must have floor under it (vertical segment ±4 around Kurt's feet z, Kurt's arena
+   only); else ±0.5·d sideways along the wall; else nothing. The move goes through
+   `damp_collide_move(dx, dy, 0, 0.75)` (4 slide iterations, Kurt's horizontal box, arenas and
+   objects), which writes `_g_damp_position/0x5739c4/0x5739c8` (and 0x5739f4.. bbox, 0x573c2c
+   touched object). The camera gets Kurt's real delta. No per-frame limit besides collision; one
+   push per frame, converging in about one frame against a perpendicular wall.
+4. Kurt blocked (wall behind him) or no floor: the camera is **not** moved closer. It keeps its
+   distance and stays behind/inside the wall for that frame (shifted only by whatever Kurt
+   actually moved) ✅. Walls hit at a grazing angle or floors/ceilings (n.xy ≈ 0) give little or
+   no push, so the camera can also end up below a floor / above a ceiling ✅ (by the maths).
+5. D, H and pitch are not read or written; Kurt's speeds untouched (`damp_collide_move` only adds
+   to the position) ✅. Only link to pitch: disabled while the look offset `0x573b1c` ≠ 0.
+   The push happens after the arena-crossing check (0x41c550 in `game_frame`), so a push across a
+   connection is noticed next frame ❓.
+
+#### In the port
+
+`FollowCamera._physics_process` (after Kurt moved, `process_physics_priority` 1): a ray (not a
+0.1 box) from the head to the camera point on Kurt's collision layer, the push and the floor
+probe as above through `Kurt.shove` (move and one slide), then the object pass with the parts'
+world boxes. Differences: it runs whatever the look offset (the port's look offset is the mouse's
+and stays); it's skipped in sniper mode, cutscenes, the `XE` ride and when Kurt is dead. Test
+`tests/camera_push_test.sh`.
 
 ## Kurt's sprite (`damp_sprite_draw`, `rle_draw_hotspot`)
 

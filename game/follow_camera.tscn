@@ -4,6 +4,7 @@
 
 [node name="FollowCamera" type="Camera3D"]
 physics_interpolation_mode = 2
+process_physics_priority = 1
 fov = 71.5
 near = 0.1
 far = 20000.0

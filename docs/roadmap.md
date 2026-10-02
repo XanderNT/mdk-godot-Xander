@@ -57,6 +57,8 @@
 - Rides: the snowboard of level 4, the `XD2` and the `XE` bomber of level 7 (`MDKRides`, `MDKBomber`); Kurt breaks triangle
   groups he runs into (the ice walls).
 - Kurt grabs ledges and climbs up them; the end of a level turns him and tilts the view up.
+- The camera roll (running and turning, sliding, the board), walls hit head-on stop Kurt, and the
+  camera pushes Kurt away from walls instead of getting closer.
 - Aliens plan detours around walls (`plan_move`), replan when stuck, and bank into their turns.
 - Sniper mode: the scope screen, zoom, target lock, the clip and rounds (bullets, homing bullets,
   grenades, homing grenades, the mortar and its guidance by `bomb_follow_path`), Bones' air strike,
@@ -67,9 +69,7 @@
 
 ## Next
 
-6. **Rides**: the camera roll on the board.
-4. **Movement details**: slippery floors, camera roll, pushing Kurt
-   away from walls instead of moving the camera closer, stopping on walls hit head-on.
+- **Rides**: the camera pivot dip during a board jump.
 
 ## Menu
 

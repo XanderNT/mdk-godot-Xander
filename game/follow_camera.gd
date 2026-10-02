@@ -1,8 +1,11 @@
 ## Third person camera behind Kurt, following the original `camera_update`.
 ##
 ## The pitch (positive looks down) is the current arena's pitch (from the DTI), plus the look
-## up/down offset, plus a tilt while airborne. Unlike the original, which pushes Kurt away from walls
-## so the camera never gets closer, this camera moves closer when something is in the way.
+## up/down offset, plus a tilt while airborne. The camera never gets closer: a wall or a solid
+## object between Kurt's head and the camera pushes Kurt away instead (`camera_clearance`).
+##
+##   wall │      camera ●        wall │  camera ●
+##        │  ← Kurt              ──▶  │       ← ← Kurt (pushed by d · n)
 class_name FollowCamera
 extends Camera3D
 
@@ -17,6 +20,13 @@ const AIR_PITCH_MAX := 40.0
 const AIR_PITCH_DECAY := 40.0
 ## Kurt's head height, from which the camera's line of sight is checked.
 const HEAD_HEIGHT := 5.5
+## `camera_clearance` (0x417ee8): where Kurt is pushed must have a floor within 4 units above or
+## below his feet, else half the push is tried to each side along the wall. Objects with flag
+## 0x1000000 (and not 0x810) also block the view.
+const PUSH_FLOOR_RANGE := 4.0
+const PUSH_SIDE := 0.5
+const VIEW_BLOCKING := 0x1000000
+const VIEW_IGNORED := 0x810
 ## Screen shake (`0x573aa8`): each tick above 1 the view is shifted by up to ±1.64 × the shake in
 ## pixels of the 600×360 view (at most ±19 horizontally, ±59 vertically); it drains by 0.25 per tick.
 const SHAKE_SCALE := 16384.0 * 0.0001
@@ -40,6 +50,8 @@ var air_time := 0.0
 var shake := 0.0
 var _shake_offset := Vector2.ZERO
 var _shake_time := 0.0
+## The pitch of the last frame (radians), for the push in the physics tick.
+var _pitch := 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -82,24 +94,9 @@ func _process(delta: float) -> void:
 		end_tilt = scripts.end_level.pitch_offset
 	look_offset = clampf(look_offset, MIN_PITCH - arena_pitch - air_pitch, MAX_PITCH - arena_pitch - air_pitch)
 	var pitch := deg_to_rad(arena_pitch + look_offset + air_pitch + end_tilt)
-
+	_pitch = pitch
 	var facing := target.get_facing()
-	var distance := DISTANCE
-	var back := -distance * cos(pitch)
-	if pitch > 0.0:
-		back += 5.0 * (1.0 - cos(pitch))
-	elif pitch < deg_to_rad(-20.0):
-		distance = DISTANCE * (rad_to_deg(pitch) + 100.0) / 80.0
-		back = -distance * cos(pitch)
-	var position := feet + facing * back + Vector3.UP * (HEIGHT + distance * sin(pitch))
-
-	# Keep walls from getting between Kurt and the camera.
-	var head := feet + Vector3.UP * HEAD_HEIGHT
-	var query := PhysicsRayQueryParameters3D.create(head, position, MDKScriptRuntime.LEVEL_LAYER)
-	query.exclude = [target.get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit:
-		position = hit.position + (head - position).normalized() * 0.3
+	var position := _camera_point(feet, pitch)
 
 	var look := facing * cos(pitch) - Vector3.UP * sin(pitch)
 	# A positive roll banks the view to the right: its up turns towards its right.
@@ -110,6 +107,85 @@ func _process(delta: float) -> void:
 		var per_pixel := deg_to_rad(fov) / VIEW_HEIGHT
 		view = view * Basis.from_euler(Vector3(_shake_offset.y * per_pixel, -_shake_offset.x * per_pixel, 0.0))
 	global_transform = Transform3D(view, position)
+
+
+## The camera's place for Kurt's feet at `feet` and the pitch `pitch` (radians).
+func _camera_point(feet: Vector3, pitch: float) -> Vector3:
+	var distance := DISTANCE
+	var back := -distance * cos(pitch)
+	if pitch > 0.0:
+		back += 5.0 * (1.0 - cos(pitch))
+	elif pitch < deg_to_rad(-20.0):
+		distance = DISTANCE * (rad_to_deg(pitch) + 100.0) / 80.0
+		back = -distance * cos(pitch)
+	return feet + target.get_facing() * back + Vector3.UP * (HEIGHT + distance * sin(pitch))
+
+
+## After Kurt moved: what stands between his head and the camera pushes him away (0x417ee8).
+## The port doesn't skip it while the look offset is set (it's the mouse's, and stays).
+func _physics_process(_delta: float) -> void:
+	if target.sniping or target.state == Kurt.State.DEAD or not scripts or scripts.cutscene or scripts.rides.bomber:
+		return
+	var feet := target.global_position
+	var head := feet + Vector3.UP * HEAD_HEIGHT
+	var camera := _camera_point(feet, _pitch)
+	camera += _push_from_wall(feet, head, camera)
+	_push_from_objects(head, camera)
+
+
+## A wall of the arenas Kurt collides with between his head and the camera: Kurt goes
+## `d · n` away from it (d: how far the camera is past the wall, n: the wall's horizontal normal
+## towards Kurt), if there's floor there (or half of `d` to a side). Returns how far he went.
+func _push_from_wall(feet: Vector3, head: Vector3, camera: Vector3) -> Vector3:
+	var query := PhysicsRayQueryParameters3D.create(head, camera, Level.KURT_LAYER)
+	query.exclude = [target.get_rid()]
+	var space := get_world_3d().direct_space_state
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return Vector3.ZERO
+	var normal: Vector3 = hit.normal
+	if (head - hit.position).dot(normal) < 0.0:
+		normal = -normal
+	var d := Vector2(camera.x - hit.position.x, camera.z - hit.position.z).length()
+	var push := Vector3(normal.x, 0.0, normal.z) * d
+	if target.is_on_floor():
+		var side := Vector3(-normal.z, 0.0, normal.x) * d * PUSH_SIDE
+		var found := false
+		for offset: Vector3 in [push, push + side, push - side]:
+			if _has_floor(space, feet + offset):
+				push = offset
+				found = true
+				break
+		if not found:
+			return Vector3.ZERO
+	return target.shove(push)
+
+
+func _has_floor(space: PhysicsDirectSpaceState3D, point: Vector3) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(point + Vector3.UP * PUSH_FLOOR_RANGE,
+			point + Vector3.DOWN * PUSH_FLOOR_RANGE, Level.KURT_LAYER)
+	return not space.intersect_ray(query).is_empty()
+
+
+## Solid objects of Kurt's arena in the way: the view ends where it first meets one of their parts,
+## and Kurt goes forward by what was cut off.
+func _push_from_objects(head: Vector3, camera: Vector3) -> void:
+	var from := MDKScriptRuntime.to_mdk(head)
+	var to := MDKScriptRuntime.to_mdk(camera)
+	var end := to
+	for obj in scripts.objects:
+		if obj.dead or obj.health == 0 or obj.arena != scripts.current_arena or not obj.model:
+			continue
+		if not obj.flags & VIEW_BLOCKING or obj.flags & VIEW_IGNORED:
+			continue
+		for part_bounds in obj.get_part_bounds():
+			var crossing: Variant = scripts.get_world_bounds(obj, part_bounds).intersects_segment(from, end)
+			if crossing != null:
+				end = crossing
+	if end == to:
+		return
+	var cut := MDKMeshBuilder.to_godot(end) - camera
+	target.shove(Vector3(cut.x, 0.0, cut.z))
 
 
 ## Sniper mode: the view from Kurt's eye through the scope, whose focal length is 384 / zoom pixels of

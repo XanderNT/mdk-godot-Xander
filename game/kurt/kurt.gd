@@ -980,6 +980,16 @@ func _update_muzzle() -> void:
 	muzzle.show_frame(sprites.get_animation("K_MUZZF"), _muzzle_frame)
 
 
+## Moves Kurt by `offset` with collision, sliding along what he meets (the camera's push,
+## `damp_collide_move`). Returns how far he went.
+func shove(offset: Vector3) -> Vector3:
+	var start := global_position
+	var collision := move_and_collide(offset)
+	if collision:
+		move_and_collide(collision.get_remainder().slide(collision.get_normal()))
+	return global_position - start
+
+
 ## A wall of the arena ahead within 30° of head-on: Kurt goes up to it and no further this tick
 ## (his speeds stay). Godot would let him slide along it.
 func _stop_head_on(delta: float) -> void:
