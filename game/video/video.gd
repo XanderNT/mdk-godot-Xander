@@ -1,7 +1,8 @@
 ## Plays an FLC (`MDKFlc`) on the 600×360 view, scaled to the window: one frame per game frame
 ## of the original (34 ms; the file's own speed is ignored), the palette per frame, through
-## `flc.gdshader`. The last frame stays; still images (`show_still`) use the same view. See
-## docs/gameplay.md, "Videos".
+## `flc.gdshader`. The last frame stays; still images (`show_still`) use the same view. An MVE
+## (`MDKMve`, `play_movie`) plays at its own rate with its sound, centred on the 640×480 screen.
+## See docs/gameplay.md, "Videos".
 class_name MDKVideo
 extends Control
 
@@ -12,11 +13,23 @@ signal frame_shown(frame: int)
 signal finished
 
 const VIEW := Vector2(600.0, 360.0)
+## MVEs are centred on the whole screen.
+const SCREEN := Vector2(640.0, 480.0)
+## Seconds of sound the generator holds (the movie starts with about 1 s of it).
+const SOUND_BUFFER := 2.0
+## The movie's sound is a bit shorter than its frames (1462 samples against 66.7 ms): with less
+## than this much queued, the next frame comes at once, so the sound leads.
+const SOUND_LOW := 0.25
 ## The original's game frame is at least 34 ms (≈ 29.4 fps).
 const FRAME_MS := 34.0
 const SHADER := preload("res://mdk/shaders/flc.gdshader")
 
 var _flc: MDKFlc
+var _mve: MDKMve
+var _sound: AudioStreamGeneratorPlayback
+## The area the image is fitted in, and the image's size in it.
+var _view := VIEW
+var _image_size := VIEW
 var _skip := Skip.NO
 var _time := 0.0
 ## Seconds the video stays on its frame.
@@ -46,6 +59,29 @@ func play(path: String, skip := Skip.NO) -> bool:
 	return true
 
 
+## Starts the MVE `path` (relative to the game's data). Returns false when it can't be read.
+func play_movie(path: String, skip := Skip.NO) -> bool:
+	_mve = MDKMve.load_file(MDKData.path(path))
+	if not _mve:
+		return false
+	_skip = skip
+	_time = 0.0
+	_view = SCREEN
+	if not _next_movie_frame():
+		return false
+	var player := AudioStreamPlayer.new()
+	var stream := AudioStreamGenerator.new()
+	stream.mix_rate = _mve.sample_rate
+	stream.buffer_length = SOUND_BUFFER
+	player.stream = stream
+	player.bus = &"Effects"
+	add_child(player)
+	player.play()
+	_sound = player.get_stream_playback()
+	_push_sound()
+	return true
+
+
 ## Stays on the current frame for `seconds`.
 func hold(seconds: float) -> void:
 	_hold = seconds
@@ -58,7 +94,7 @@ func set_brighten(amount: float) -> void:
 
 ## Whether a video is running.
 func is_playing() -> bool:
-	return _flc != null
+	return _flc != null or _mve != null
 
 
 ## The image on the view: its indices (R8) and its palette (256 × 1 RGB).
@@ -79,10 +115,14 @@ func show_still(width: int, height: int, indices: PackedByteArray, palette: Pack
 		var material := _rect.material as ShaderMaterial
 		material.set_shader_parameter(&"index_texture", _indices)
 		material.set_shader_parameter(&"palette", _palette)
+	_image_size = Vector2(width, height)
 	_layout()
 
 
 func _process(delta: float) -> void:
+	if _mve:
+		_update_movie(delta)
+		return
 	if not _flc:
 		return
 	if _hold > 0.0:
@@ -103,10 +143,43 @@ func _show_next() -> void:
 	frame_shown.emit(_flc.frame)
 
 
-## The view keeps its 600:360 shape, centred in the window on black.
+## A frame every `frame_time` µs, or sooner when the sound runs low; its sound goes to the
+## generator.
+func _update_movie(delta: float) -> void:
+	_time += delta * 1000000.0
+	while _mve and (_time >= _mve.frame_time or _sound_queued() < SOUND_LOW):
+		_time = maxf(_time - _mve.frame_time, 0.0)
+		if not _next_movie_frame():
+			_finish()
+			return
+		_push_sound()
+
+
+## Seconds of sound waiting in the generator.
+func _sound_queued() -> float:
+	if not _sound:
+		return INF
+	var capacity := roundi(_mve.sample_rate * SOUND_BUFFER)
+	return float(capacity - _sound.get_frames_available()) / _mve.sample_rate
+
+
+func _next_movie_frame() -> bool:
+	if not _mve.next_frame():
+		return false
+	show_still(_mve.width, _mve.height, _mve.get_indices(), _mve.palette)
+	frame_shown.emit(_mve.frame)
+	return true
+
+
+func _push_sound() -> void:
+	if _sound and not _mve.audio.is_empty():
+		_sound.push_buffer(_mve.audio)
+
+
+## The view keeps its shape, centred in the window on black; the image is centred in it.
 func _layout() -> void:
-	var scale := minf(size.x / VIEW.x, size.y / VIEW.y)
-	_rect.size = VIEW * scale
+	var scale := minf(size.x / _view.x, size.y / _view.y)
+	_rect.size = _image_size * scale
 	_rect.position = (size - _rect.size) / 2.0
 
 
@@ -115,7 +188,7 @@ func _draw() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _skip == Skip.NO or not _flc:
+	if _skip == Skip.NO or not is_playing():
 		return
 	var pressed := (event is InputEventKey or event is InputEventMouseButton) and event.is_pressed() and not event.is_echo()
 	if pressed:
@@ -125,4 +198,5 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _finish() -> void:
 	_flc = null
+	_mve = null
 	finished.emit()

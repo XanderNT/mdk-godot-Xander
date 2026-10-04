@@ -284,8 +284,23 @@ Kurt's extra sprite animations for a level are kept in its `LEVELnS.SNI` instead
   the ring frame back to the first, which isn't shown. `MDKFlc`.
 - `MISC/MDKS_001.GIF`…`008`: GIF87a/89a stills, 600 × 360, one image each with its own palette.
   `MDKGif`.
-- `MISC/FLIC/MDKBZK.MVE`: Interplay MVE, 432 × 320, video opcode 0x11 version 3, Interplay DPCM
-  stereo 16-bit 22050 Hz sound, 14.99 fps, 3128 frames (see [gameplay.md](gameplay.md#videos)).
+- `MISC/FLIC/MDKBZK.MVE`: Interplay MVE, 432 × 320, 14.99 fps (timer 8341 µs × 8), 3126 shown
+  frames, stereo 16-bit 22050 Hz Interplay DPCM sound (see [gameplay.md](gameplay.md#videos)).
+  `MDKMve`:
+  - A 26-byte signature, then chunks `u16 size, u16 type` of opcodes `u16 size, u8 type, u8
+    version, data`: 0x02 timer (`u32 µs, u16 count`), 0x03 sound (`u16, u16 flags` 1 stereo, 2 16
+    bits, 4 compressed, `u16 rate`), 0x05 screen (`u16 width / 8, u16 height / 8`), 0x0C palette
+    (`u16 first, u16 count`, 6-bit RGB), 0x0F decoding map, 0x11 video data, 0x07 show (the buffers
+    swap), 0x08 sound and 0x09 silence (`u16 sequence, u16 stream mask, u16 size`), 0x01 end of
+    chunk, 0x00 end.
+  - Video 0x11 (8 bits): after a 14-byte header, one opcode per 8 × 8 block from the decoding map
+    (4 bits, low nibble first, blocks row by row): 0 copy from the shown frame, 1 unchanged (the back
+    buffer still holds the frame before), 2/3 copy from the back buffer with a motion vector from one
+    byte, 4/5 copy from the shown frame (one byte as two nibbles, or two signed bytes), 7/8 two
+    colours per pixel, 2 × 2, quadrant or half, 9/A four colours the same way, B 64 raw bytes, C 16
+    2 × 2 colours, D 4 quadrant colours, E one colour, F a checkerboard of two.
+  - Sound: per channel an `s16` start value, then each byte adds a step from a 256-entry table to
+    the channels in turn (Interplay DPCM).
 
 ## Statistics files ✅
 

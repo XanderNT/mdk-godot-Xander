@@ -1,13 +1,14 @@
 ## The end of the game (game state 8, 0x47727c): `MISC/FLIC/MDKEND.FLC` with its sounds from
-## `MISC/FINISH.BNI` and a white flash (0x477604), then the main menu. The original then plays
-## `MDKBZK.MVE` and the `INTRO1A` splash, which the port doesn't have yet. See docs/gameplay.md,
-## "Videos".
+## `MISC/FINISH.BNI` and a white flash (0x477604), then `MISC/FLIC/MDKBZK.MVE` (0x477870) and the
+## main menu (the original shows the `INTRO1A` splash first). See docs/gameplay.md, "Videos".
 ##
 ##   frame 1 DOGSHIP (loop) … 129 DROP, 133 FLYBY, 186 EXPLODE1, 188 DOGSHIP stops, 194 ENDEXP,
 ##   196 EXPLODE1, 210–232 whiter, 233 white for 1 s, 233–260 back
+class_name EndMovie
 extends Control
 
 const VIDEO := "MISC/FLIC/MDKEND.FLC"
+const MOVIE := "MISC/FLIC/MDKBZK.MVE"
 const SOUNDS := "MISC/FINISH.BNI"
 const MENU := "res://game/menu/main_menu.tscn"
 ## Sounds by frame (the frame counter before decoding a frame, from 0).
@@ -21,6 +22,9 @@ const FLASH_PEAK := 233
 const FLASH_END := 260
 const FLASH_HOLD := 1.0
 
+## The end has been shown (the menu doesn't play it again for `--end`).
+static var played := false
+
 var _video := MDKVideo.new()
 var _sounds: MDKBni
 var _players := {}
@@ -31,9 +35,9 @@ func _ready() -> void:
 	add_child(_video)
 	_sounds = MDKBni.load_file(MDKData.path(SOUNDS))
 	_video.frame_shown.connect(_on_frame)
-	_video.finished.connect(_to_menu)
+	_video.finished.connect(_play_movie, CONNECT_ONE_SHOT)
 	if not _video.play(VIDEO):
-		_to_menu.call_deferred()
+		_play_movie.call_deferred()
 	var args := Args.get_all()
 	if args.has("screenshot"):
 		# Tests: `--wait=seconds` into the video.
@@ -41,7 +45,8 @@ func _ready() -> void:
 		Args.screenshot_and_quit(get_tree(), args.screenshot)
 
 
-## Esc gives up (the original asks first, and "quit" also skips the MVE).
+## Esc gives up (the original asks first during the FLC, and "quit" also skips the MVE; the MVE
+## can't be stopped).
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
 		_to_menu()
@@ -67,6 +72,16 @@ static func _flash(frame: int) -> float:
 	return roundf(255.0 * (FLASH_END - frame) / (FLASH_END - FLASH_PEAK)) / 255.0
 
 
+## After the FLC: the MVE, then the menu.
+func _play_movie() -> void:
+	for player: AudioStreamPlayer in _players.values():
+		player.stop()
+	_video.set_brighten(0.0)
+	_video.finished.connect(_to_menu, CONNECT_ONE_SHOT)
+	if not _video.play_movie(MOVIE):
+		_to_menu()
+
+
 func _play(sound_name: String) -> void:
 	if not _sounds or not _sounds.has(sound_name):
 		return
@@ -80,4 +95,5 @@ func _play(sound_name: String) -> void:
 
 
 func _to_menu() -> void:
+	played = true
 	get_tree().change_scene_to_file(MENU)

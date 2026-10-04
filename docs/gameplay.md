@@ -2049,9 +2049,12 @@ then:
 slideshow's GIFs (`tests/gif_test.gd`), `MDKVideo` shows either through `flc.gdshader` at the
 original's game rate (34 ms a frame). The main menu plays `MDK12.FLC` behind its items and then
 the slideshow (`MenuSlideshow`); event 81 opens `EndMovie` (`MDKEND.FLC` with its sounds, flash and
-hold, `--end` to test), then the menu. Not done: `MDKBZK.MVE` (needs an Interplay MVE decoder), the
-`INTRO1A` splash, the abort prompt during the end FLC (Esc goes to the menu), the slideshow's key
-`0x57ea34`.
+hold, `--end` to test), then `MDKBZK.MVE` (`MDKMve`, tested against ffmpeg, `tests/mve_test.gd`;
+centred on the 640 × 480 screen, its sound through an `AudioStreamGenerator`; the sound is a bit
+shorter than the frames, 1462 samples against 66.7 ms, so the next frame comes early whenever less
+than 0.25 s of sound is queued), then the menu. Not done: the `INTRO1A` splash, the abort prompt
+during the end FLC (Esc goes to the menu, also during the MVE, which the original can't stop), the
+slideshow's key `0x57ea34`.
 
 ### Where videos play
 

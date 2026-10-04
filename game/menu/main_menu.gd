@@ -36,7 +36,7 @@ func _ready() -> void:
 		GameState.level = int(args.stream)
 		get_tree().change_scene_to_file.call_deferred("res://game/stream/stream.tscn")
 		return
-	if args.has("end"):
+	if args.has("end") and not EndMovie.played:
 		# Test: the end movie (`--end`).
 		get_tree().change_scene_to_file.call_deferred("res://game/video/end_movie.tscn")
 		return
