@@ -274,6 +274,19 @@ Kurt's extra sprite animations for a level are kept in its `LEVELnS.SNI` instead
   - `F8`: 8 × 8 bitmap font (128 characters) ✅
   - `SND_PUSH`: menu sound (RIFF WAV) ✅
 
+## Videos and images ✅
+
+- `MISC/FLIC/*.FLC`: Autodesk FLC (magic 0xAF12), 600 × 360, 8 bits: a 128-byte header (`u32
+  size, u16 magic, u16 frames, u16 width, u16 height, u16 depth, u16 flags, u32 speed`, `oframe1`
+  at 80), then frame chunks (0xF1FA: `u32 size, u16 type, u16 chunks`, 16 bytes) with sub-chunks
+  `COLOR_256` (4), `BYTE_RUN` (15), `DELTA_FLC` (7), `BLACK` (13, only in ring frames); `MDKEND.FLC`
+  starts with a prefix chunk (0xF100) and has a postage stamp (18). Each file has one more frame,
+  the ring frame back to the first, which isn't shown. `MDKFlc`.
+- `MISC/MDKS_001.GIF`…`008`: GIF87a/89a stills, 600 × 360, one image each with its own palette.
+  `MDKGif`.
+- `MISC/FLIC/MDKBZK.MVE`: Interplay MVE, 432 × 320, video opcode 0x11 version 3, Interplay DPCM
+  stereo 16-bit 22050 Hz sound, 14.99 fps, 3128 frames (see [gameplay.md](gameplay.md#videos)).
+
 ## Statistics files ✅
 
 Used by the between-level screens (see [gameplay.md](gameplay.md#statistics-and-briefing-state-6));

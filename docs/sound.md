@@ -338,4 +338,4 @@ Only used by scripts (never by code): `ALDIE` (level copy), `GRUNTFIRE`, `XF_AMB
 - The port's options screen (main and pause menus) plays `OPTSONG` on the music bus and `OPTBUTT`
   on each change (`MenuItems`, test `tests/option_song_test.gd`); the main menu stops `MAINSONG`
   meanwhile. In the original `OPTBUTT` also sounds on the selection key.
-- Not done: the end movie.
+- The end movie's sounds play by frame (`EndMovie`). Not done: the MVE's own sound.

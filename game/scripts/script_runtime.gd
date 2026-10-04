@@ -122,6 +122,8 @@ var _camera_point := Vector3()
 var level_over := false
 ## A level ended (`special_event` ≤ 50), or the whole game (event 81).
 signal level_ended(game_over: bool)
+## The end of the game (special event 81): the end movie follows.
+signal game_finished
 ## The full-screen strike started (true) or ended (false): the game is paused but not the music.
 signal strike_scene(active: bool)
 var town_ticks := 0
@@ -502,9 +504,9 @@ func special_event(obj: MDKObject, event: int) -> void:
 				camera_yaw = 270.0 - gunter.yaw
 				camera_distance = 45.0
 		81:
-			# The end of the game: the original plays `MISC/FLIC/MDKEND.FLC` and `MDKBZK.MVE`.
+			# The end of the game: `MISC/FLIC/MDKEND.FLC` and `MDKBZK.MVE` (game state 8).
 			_start_cutscene(CUTSCENE_END, obj)
-			level_ended.emit(true)
+			game_finished.emit()
 		91:
 			_start_cutscene(CUTSCENE_ALL_FLAGGED, obj)
 			camera_mode = 12

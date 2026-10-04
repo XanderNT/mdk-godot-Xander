@@ -46,6 +46,8 @@ extends Node3D
 const BOMBER_ARENA := "DANT_5"
 const BOMBER_CALL_GROUP := 16
 const BOMBER_CALL_DELAY := 1.0
+## The end of the game (game state 8).
+const END_MOVIE := "res://game/video/end_movie.tscn"
 ## F2 makes a full save (0x42b520(0)), offering the level's number as its name.
 const SNAPSHOT_KEY := KEY_F2
 ## The name prompt is drawn over the HUD and the pause menu.
@@ -129,6 +131,7 @@ func _ready() -> void:
 		hud.scripts = scripts
 		$FollowCamera.scripts = scripts
 		scripts.level_ended.connect(_on_level_ended)
+		scripts.game_finished.connect(get_tree().change_scene_to_file.bind(END_MOVIE), CONNECT_DEFERRED)
 		# The music goes on during the full-screen strike.
 		scripts.strike_scene.connect(func(active: bool) -> void:
 			$LevelAudio.process_mode = Node.PROCESS_MODE_ALWAYS if active else Node.PROCESS_MODE_INHERIT)

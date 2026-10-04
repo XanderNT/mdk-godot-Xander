@@ -814,7 +814,7 @@ Snake-like aliens: a head object with links hanging off it (level 3's flying bom
   (`0x573b60` = 1), Kurt's health is at least 1, the sounds `NUKE` and `TORNADO` play and the arena
   breaks up around Kurt (`END_LEVEL`: 100000, 500, 0.15, 0.025 at 0x490654 ❓ how it looks).
 - The port runs the cutscenes (state, which objects run and show, the camera), the full-screen
-  strike (`MDKStrikeScene`) and goes on to the next level 5 s after the end; the videos aren't done.
+  strike (`MDKStrikeScene`), and event 81 plays the end movie (`EndMovie`, see gameplay.md "Videos").
 
 ### The full-screen strike (0x4398f0)
 

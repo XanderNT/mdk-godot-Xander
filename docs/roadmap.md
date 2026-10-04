@@ -69,8 +69,7 @@
 
 ## Next
 
-1. **Videos**: the menu's `MDK12.FLC`, the end `MDKEND.FLC` and `MDKBZK.MVE` (no FLC/MVE decoder
-   yet).
+1. **Videos**: `MDKBZK.MVE` after the end movie (an Interplay MVE decoder), the `INTRO1A` splash.
 2. **Menu**: the original font in the main menu, the gore option (taken as on), the level select.
 3. **Special materials**: mirrors, glass, animated water.
 4. **Small gaps**: doors moved into a newly loaded arena (`spawn_connector`), the fans' fire
@@ -82,7 +81,8 @@
 - Options: sound volumes, music filter, mouse, fullscreen, difficulty and key bindings (one key or
   mouse button per action) are done; still to do: the enhanced mode below. The pause menu (Esc) has
   resume, options, main menu, quit.
-- Original assets where possible (`MISC/OPTIONS.BNI`, `MISC/MDKFONT.FTI`, menu video `MDK12.FLC`).
+- Original assets where possible (`MISC/OPTIONS.BNI`, `MISC/MDKFONT.FTI`, menu video `MDK12.FLC` and
+  the `MDKS_*.GIF` slideshow, the end movie `MDKEND.FLC`).
 
 ## Enhanced graphics mode
 

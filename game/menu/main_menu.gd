@@ -1,15 +1,21 @@
 ## The main menu: original background, texts and music. The original font isn't decoded yet.
+## `MDK12.FLC` plays behind it each time it opens (0x4260e4), its last frame stays, then the
+## slideshow (`MenuSlideshow`); `MDKOPT` is the background when the video is missing.
 ##
 ## Game command line options (`--level`, `--viewer`, `--screenshot`, …) skip the menu,
 ## unless `--menu` is given; `--options` and `--controls` open those screens; `--stats=N` shows the
 ## screens after LEVELn (`--phase=1…4` starts at a page, `--counts=shots,hits,sniper,sniper hits,
 ## kills,enemies,heads`, `--towns=bits`), `--briefing=N` its briefing and `--fall=N` the fall before it,
-## `--stream=N` the stream after it.
+## `--stream=N` the stream after it, `--end` the end movie.
 extends Control
+
+const MENU_VIDEO := "MISC/FLIC/MDK12.FLC"
 
 
 var fti: MDKFti
 var level_index := 0
+var _video := MDKVideo.new()
+var _slideshow: MenuSlideshow
 
 @onready var background: TextureRect = $Background
 @onready var items: MenuItems = $Items
@@ -30,6 +36,10 @@ func _ready() -> void:
 		GameState.level = int(args.stream)
 		get_tree().change_scene_to_file.call_deferred("res://game/stream/stream.tscn")
 		return
+	if args.has("end"):
+		# Test: the end movie (`--end`).
+		get_tree().change_scene_to_file.call_deferred("res://game/video/end_movie.tscn")
+		return
 	if args.has("fall"):
 		# Test: the fall before LEVELn (`--fall=N`).
 		GameState.level = int(args.fall)
@@ -48,6 +58,14 @@ func _ready() -> void:
 	var palette := MDKPalette.from_rgb(options.bytes.slice(entry[0], entry[0] + 768))
 	var image := MDKTexture.parse("MDKOPT", options.bytes, entry[0] + 768)
 	background.texture = ImageTexture.create_from_image(palette.make_image(image.width, image.height, image.indices))
+	_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.add_sibling(_video)
+	_slideshow = MenuSlideshow.new(_video, items)
+	if _video.play(MENU_VIDEO):
+		background.visible = false
+		_video.finished.connect(_slideshow.start)
+	else:
+		_video.queue_free()
 
 	var song: Array = options.entries["MAINSONG"]
 	music.bus = &"Music"
@@ -64,7 +82,21 @@ func _ready() -> void:
 		items.show_controls(_show_options)
 
 	if args.has("screenshot"):
+		# `--wait=seconds` first (the menu video, the slideshow).
+		if args.has("wait"):
+			await get_tree().create_timer(float(args.wait)).timeout
 		Args.screenshot_and_quit(get_tree(), args.screenshot)
+
+
+func _process(delta: float) -> void:
+	if _slideshow:
+		_slideshow.update(delta)
+
+
+## Any key or click starts the slideshow's wait again (the menu still gets it).
+func _input(event: InputEvent) -> void:
+	if _slideshow and (event is InputEventKey or event is InputEventMouseButton) and event.is_pressed():
+		_slideshow.reset()
 
 
 func _show_main() -> void:

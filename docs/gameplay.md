@@ -2041,6 +2041,192 @@ then:
   `0x520880` is only read.
 - Palette effect for death at exactly `f = 1`: `trunc(256)` wraps to red 0 for one frame.
 
+## Videos
+
+✅ verified in code/data, ❓ guess.
+
+**In the port**: `MDKFlc` decodes FLCs (tested against Pillow, `tests/flc_test.gd`), `MDKGif` the
+slideshow's GIFs (`tests/gif_test.gd`), `MDKVideo` shows either through `flc.gdshader` at the
+original's game rate (34 ms a frame). The main menu plays `MDK12.FLC` behind its items and then
+the slideshow (`MenuSlideshow`); event 81 opens `EndMovie` (`MDKEND.FLC` with its sounds, flash and
+hold, `--end` to test), then the menu. Not done: `MDKBZK.MVE` (needs an Interplay MVE decoder), the
+`INTRO1A` splash, the abort prompt during the end FLC (Esc goes to the menu), the slideshow's key
+`0x57ea34`.
+
+### Where videos play
+
+
+#### `MDK12.FLC`: the main menu background (0x4260e4)
+
+0x4260e4 opens `MISC\FLIC\MDK12.FLC` (0x4262a8) and makes it the menu background. If the file is missing it shows the `MDKOPT` still with its palette (0x4148d0) ✅.
+Its 4 callers are all "the main menu opens" ✅:
+
+| Caller | When |
+| --- | --- |
+| 0x42618c(0) (menu init) | back to the menu without a splash: game aborted (Esc → abort prompt → 0x403e08, also during the end FLC), save list closed (0x428f9c), loading a save failed (0x429100, 0x430930), 0x403dbc |
+| 0x426edc, end | after the `INTRO1A` splash. `0x42618c(1)` shows that splash first: at program start (0x40272c), on game over (0x40216e), after the end videos (0x47727c) |
+| 0x427210, end | `INTRO1A` + `INTRO2` splash. **Unused**: `OPTIONS.BNI` has no `INTRO2` ✅ |
+| 0x427644, end | `SHINY.FLC` + `PIE.FLC`. **Unused**: needs a `PLAYMATE` entry in `OPTIONS.BNI` (0x427898), which is absent ✅ |
+
+The dispatcher is 0x427898: `PLAYMATE` → 0x427644, else no `INTRO2` → 0x426edc, else 0x427210. `0x4911a0` holds the sub-state.
+
+- The `INTRO1A` splash (0x426edc) is a still image (RLE, drawn by 0x426e04), not a video. It fades in over 1 s, holds 3 s, then fades out (0.5/s, then 1/s) ✅. Durations: `0x495074` = 3, `0x49506c` = 0.5. The fade colours are ❓.
+- The options sub-screens (sound options 0x42bb6c/0x42bbc0) don't replay MDK12 ✅ (they don't call 0x42618c).
+
+#### Menu attract slideshow (`MISC\MDKS_%3.3d.GIF`, 0x4279a0), not a video, but it replaces the FLC
+
+While the FLC plays, the idle timer `0x4911cc` stays at 0. After the FLC ends ✅:
+- after 5 s (`0x495054`): `MDKS_001.GIF` replaces the background. The menu items are hidden while image #1 shows.
+- after 4 s (`0x49505c`): `MDKS_002`, and so on, each shown 2 s (`0x495064`) with the menu items over it.
+- After the last GIF (`MDKS_009` missing) the counter goes back to 0 and the last MDK12 frame shows again (the FLC is not replayed). The cycle then restarts.
+- Each GIF uses its own palette and must be 600×360.
+- Menu navigation resets the timer. On image #1 it sets the timer to 999, so the next image comes at once. Key flag `0x57ea34` advances at once ❓ (which key).
+
+#### `SHINY.FLC` → `PIE.FLC` (0x427644), unused in retail
+
+Sub-states:
+1. Draw `MDKOPT`, then load SHINY completely into memory (0x426310) with a loading bar.
+2. Play SHINY one frame per tick.
+3. Load PIE (loading bar, last SHINY frame behind it).
+4. Play PIE.
+5. Then `MDK12` + menu.
+
+Any key skips straight to MDK12 + menu ✅. Probably the Shiny/Interplay logo intro of an OEM/demo build ❓.
+
+#### The end: `MDKEND.FLC` → `MDKBZK.MVE` (game state 8, 0x47727c)
+
+- Event 81 → `0x477248(1)` → state 8.
+- The first frame (0x47730c):
+  - unloads the level (0x41e658);
+  - loads the whole FLC into memory with a loading bar (100..500 × 340..350 of the 600×360 view);
+  - loads `MISC/FINISH.BNI` sounds;
+  - allocates the 600×360 target and the 768-byte `fliclut` palette copy.
+- Each frame: 0x477604 (extras + one FLC frame). When the FLC ends: cleanup (0x4777f4), then `MDKBZK.MVE` (0x477870, blocking), then `0x42618c(1)` → `INTRO1A` splash → MDK12 + menu ✅.
+- `0x477248(0)`: the cheat at 0x42c5f0 (compared string `pxxyhccixyiisjn` at 0x4956d0; the typed form is ❓, the buffer goes through 0x42e060 first) jumps straight to the MVE, without the FLC ✅.
+- Esc during the FLC opens the abort prompt (0x403cf8; state 8 is not excluded). "Quit" → 0x403e08 → 0x4772e8 cleanup → `0x42618c(0)`, which skips the MVE ✅. There is no other skip for the FLC.
+
+#### `BONEFLC`: not a video
+
+It is a pickup type. op_161 (`spawn_flagged`) creates it as a 9×9×6 box object. In the used-at-once table (0x4920e0 / string ref 0x49210c), case 11 of 0x46d478 only plays a sound (`0x5744d0`, `BONES` ❓). It shows no message and plays no FLC ✅.
+
+### FLC playback
+
+The player state is a 0x458-byte struct (menu: `0x57ed40`, end: `0x5994a0`).
+
+- **Open** ✅:
+  - from a file streamed into memory (0x414b68, used by MDK12);
+  - from a memory image (0x4149b0, used by SHINY/PIE/MDKEND).
+  - The magic must be `0xAF12` (FLC) or `0xAF11` (FLI). Decoding starts at `oframe1`.
+- **Per frame, not blocking** ✅: one call to 0x414ee8 decodes one frame per game frame. The game frame is limited to ≥ 34 ms (≈ 29.4 fps).
+  - **The header `speed` is stored (+0x124/+0x12c) but never read.** All FLCs play at the game frame rate, including `shiny.flc` (speed 60).
+  - MDK12 is streamed: the first call decodes frame 1. The following ~9 calls each read 64 KB without decoding, then playback continues ✅. So frame 1 holds about 0.3 s.
+- **End**: 0x414e84 is true when frames decoded == header `frames`. The ring frame is never shown. No loop: loop flag bit 1 is never set ✅. The last frame stays in the buffer, so **MDK12's last frame is the menu background** ✅.
+- **Chunks** ✅:
+  - 4 `COLOR_256`: all 256 entries, used directly as 8-bit RGB → 0x47070c (palette → RGB565 LUT `0x581c28`), no remapping. In all four files the palette appears only in frame 0.
+  - 11 `COLOR_64` (sets only 64 entries; unused).
+  - 15 `BYTE_RUN`, 7 `DELTA_FLC`, 16 `COPY`.
+  - 12, 13, 18 are skipped. Any other chunk type is an error.
+- **Target** ✅: the decoder writes into a 600×360 8-bit buffer (stride 600). For MDK12/SHINY/PIE that buffer is the `MDKOPT` BNI entry itself, overwritten and cleared. 0x46fa3c converts the buffer through the LUT to the 16-bit back buffer at **(20, 60) of 640×480**, the game view origin (`0x49229c/0x4922a0` = 20/60).
+- **Over MDK12** ✅: the menu items (0x42c488, at y 0x1f + 0x24·i, centred) and the mouse cursor (0x42c010). The FLC palette replaces all 256 entries, so the text colours come from the FLC palette ❓.
+- **Over the end FLC**: nothing is drawn, only a palette flash (§3) ✅.
+- **Skip keys**:
+  - menu/intro FLCs: any key (`0x57ea5c` = any key held, armed by `0x57f19c` once all keys are released). Function keys pressed at that moment are remembered (0x4278d0 → `0x57f198`) and open that screen in the menu.
+  - MDK12 in the menu: nothing to skip (the menu works during it).
+
+### End movie extras (0x477604, frame counter `n` = `0x599914`, 0-based, checked before decoding frame n)
+
+| n | Extra (✅) |
+| --- | --- |
+| 1 | `DOGSHIP` starts (looped) |
+| 0x81 = 129 | `DROP` (0x4992f0) |
+| 0x85 = 133 | `FLYBY` |
+| 0xba = 186, 0xc4 = 196 | `EXPLODE1` |
+| 0xbc = 188 | `DOGSHIP` stops |
+| 0xc2 = 194 | `ENDEXP` |
+| 0xd2 = 210 | the current palette is copied to `fliclut` (0x470af8) |
+| 210..232 | white flash: every RGB + `round(255·(n−210)/23)`, clamped (0x477594, `0x499340` = 1/23) |
+| 233 | +255 (white). **The FLC freezes 30 ticks (1 s)** (`0x599910`) |
+| 233..260 | back down: + `round(255·(260−n)/28)` (`0x499344` = 1/28) |
+
+- The sounds are 2D, volume 0x7fff. Only `DOGSHIP` loops. There is no music.
+- The FLC is 316 frames ≈ 10.7 s + 1 s freeze.
+
+#### `MDKBZK.MVE` (0x477870)
+
+- **Own player, blocking**: the linked Interplay MVE library at 0x485b80..0x48b1d8. Calls in order:
+  - memory callbacks 0x477228/0x477238;
+  - show-frame 0x477088;
+  - read 0x4771f8 (`fread`);
+  - palette 0x476ff0;
+  - screen 640×480, pitch 640 (0x485c70);
+  - DirectSound `0x492294` (0x485c60);
+  - DirectDraw `0x492310`;
+  - `rmPrepMovie(file, x = −1, y = −1, track 0)` (0x485f10).
+  Then a Win32 `PeekMessage` loop calls `rmStepMovie` (0x4861b0) until it returns non-zero (end/error) → `PostQuitMessage` ✅.
+- **Not skippable** ✅: the loop never reads keys. Only closing the window (WM_DESTROY) ends it.
+- **Afterwards** ✅: `rmEndMovie` (0x4875f0), clear screen, global palette (0x4148b0), `0x42618c(1)` → INTRO1A splash → MDK12 menu. There are no credits.
+- **Drawing** ✅: 8-bit DirectDraw surface → RGB565 LUT row by row (0x46fae0) into the back buffer, locked at the rect (dstX, dstY, w, h). x/y = −1: centred by the library ❓ → 432×320 at (104, 80).
+- **Palette** ✅: 6-bit → 8-bit (`v<<2 | v>>4`), 0x476ff0 → 0x47070c.
+- **Sound** ✅: the movie's own audio track through DirectSound.
+
+### Sound during videos
+
+| Video | Sound |
+| --- | --- |
+| MDK12 (menu) | `MAINSONG` (started by 0x426050 just before 0x4260e4) ✅ |
+| INTRO1A splash, SHINY/PIE | `MAINSONG` (0x42618c always starts it) ✅ |
+| MDKEND.FLC | `FINISH.BNI` effects only (§3) ✅ |
+| MDKBZK.MVE | its own audio stream ✅ |
+
+### MVE format for a decoder
+
+The exe's opcode switch (0x4861b0) ✅:
+
+| Op | Handling |
+| --- | --- |
+| 0 | end of stream |
+| 1 | end of chunk |
+| 2 | create timer |
+| 3 | init audio |
+| 4 | start audio |
+| 5 | init video buffers (0x486f50: 8-bit or 15-bit `0x7c00/0x3e0/0x1f`) |
+| 6 | old video codec (0x488144) |
+| 7 | show frame (end of frame) |
+| 8, 9 | audio data / silence (by stream mask) |
+| 10 | video mode (ignored here) |
+| 11 | gradient |
+| 12 | palette |
+| 13 | compressed palette |
+| 14 | skip-display marker |
+| 15 | decoding map (consumed by 0x11) |
+| 16 | 0x48835e |
+| 17 | video data, version ≥ 3 required; 8-bit decoder **0x488609**, 16-bit 0x48a084/0x48b1d8 |
+| 19, 21 | not handled (skipped) |
+
+Header check (0x485fb0): 20-byte `"Interplay MVE File\x1a\0"`, `u16 0x1a`, `u16 0x0100`, `u16 0x1133` (`~0x100 − 0x1133 = −0x1234`) ✅.
+
+**MDKBZK.MVE contents** (parsed ✅): 3146 chunks.
+
+| Chunk | Type | Contents |
+| --- | --- | --- |
+| 0 (off 26) | 2 init video, len 804 | op 10 v0 `640, 480, 0x0101`; op 5 v2 `54×40 blocks, 1, truecolor 0` → **432×320 8-bit**; op 12 v0 palette start 1, count 254 (6-bit); op 21 v0 `00 95 05 05`; op 1 |
+| 1 | 0 init audio, len 18 | op 3 v1 → flags `0xaa9f`: stereo, 16-bit, compressed; rate `0x5622` = **22050 Hz**; min buffer 88280 |
+| 2..15 | 1, audio only (14 frames of preload) | op 8 v0 + op 9 v0 (mask `0xfffe`) |
+| 16.. | 3, video | op 2 v0 (first only); op 15 v0 (1080 B = 54·40 / 2: 4-bit opcode per 8×8 block); op 8; op 9; op 17 v3 (14-byte header: `u16 seq…, u16 54, u16 40, u16 flags` (bit 0 = delta/swap ❓), then data); op 19 v0 (132 B, ignored); op 4 v0; op 7 v1 (`palette start, count, 0`); op 1 |
+| 3143 | 3 | silence only, show |
+| 3144 | 4 shutdown | op 0 |
+| 3145 | 5 end | — |
+
+- **Timer**: op 2 = `8341 µs × 8` = 66.73 ms/frame → **14.99 fps**.
+- **Length**: 3128 frames ≈ **208.7 s**.
+- **Video**: 3126 op-17 frames, 8-bit Interplay video, 16 block opcodes, 2 buffers. Same as ffmpeg `interplayvideo`.
+- **Audio**: 1470 samples/frame, Interplay DPCM (an initial s16 per channel, then 1 byte/sample indexing the 256-entry delta table). Same as ffmpeg `interplay_dpcm`.
+
+### Port notes
+
+- MDK12: decode into a 600×360 image at 29.4 fps, no loop. Keep the last frame. Menu items and cursor on top. Slideshow afterwards.
+- MDKEND: 316 frames at the game rate, sound and flash table above, then the MVE. Godot can't play MVE: convert it offline (ffmpeg reads it) to OGV, or write a decoder.
+
 ## Saving and loading (`savegame.c`, `optload.c`)
 
 - **Kinds** (`GAME` type): 3 = the start of a level (at its entry point, no fall), 6 = before a
