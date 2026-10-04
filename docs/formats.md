@@ -255,7 +255,8 @@ Kurt's extra sprite animations for a level are kept in its `LEVELnS.SNI` instead
 
 - `MISC/OPTIONS.BNI` (BNI archive): `MDKOPT` is the main menu background (a 768-byte palette, then a
   600 × 360 image with the plain image header) ✅; `MAINSONG` is the menu music (RIFF WAV) ✅;
-  `INTRO1A` ❓.
+  `INTRO1A` is the splash before the menu: two 768-byte palettes, then 600 × 360 run-length pixels
+  (see [gameplay.md](gameplay.md#videos)) ✅.
 - `MISC/MDKFONT.FTI`: `u32 size, u32 count`, then per entry `char[8] name, u32 offset` (relative to
   file offset 4) ✅. Entries:
   - texts (NUL-terminated, `\n` escapes for line breaks) ✅: `OPT0`–`OPT4` (main menu), `OM_*` (options),

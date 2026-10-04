@@ -2052,8 +2052,9 @@ the slideshow (`MenuSlideshow`); event 81 opens `EndMovie` (`MDKEND.FLC` with it
 hold, `--end` to test), then `MDKBZK.MVE` (`MDKMve`, tested against ffmpeg, `tests/mve_test.gd`;
 centred on the 640 × 480 screen, its sound through an `AudioStreamGenerator`; the sound is a bit
 shorter than the frames, 1462 samples against 66.7 ms, so the next frame comes early whenever less
-than 0.25 s of sound is queued), then the menu. Not done: the `INTRO1A` splash, the abort prompt
-during the end FLC (Esc goes to the menu, also during the MVE, which the original can't stop), the
+than 0.25 s of sound is queued), then the menu. The `INTRO1A` splash (`IntroSplash`) comes before
+the menu at start, after Kurt died and after the end movies (`GameState.splash`; `--menu` skips it
+unless `--splash` is given). Not done: the abort prompt during the end FLC (Esc goes to the menu, also during the MVE, which the original can't stop), the
 slideshow's key `0x57ea34`.
 
 ### Where videos play
@@ -2073,7 +2074,13 @@ Its 4 callers are all "the main menu opens" ✅:
 
 The dispatcher is 0x427898: `PLAYMATE` → 0x427644, else no `INTRO2` → 0x426edc, else 0x427210. `0x4911a0` holds the sub-state.
 
-- The `INTRO1A` splash (0x426edc) is a still image (RLE, drawn by 0x426e04), not a video. It fades in over 1 s, holds 3 s, then fades out (0.5/s, then 1/s) ✅. Durations: `0x495074` = 3, `0x49506c` = 0.5. The fade colours are ❓.
+- The `INTRO1A` splash (0x426edc) is a still image, not a video ✅: two 8-bit palettes (768
+  bytes each), then 600 × 360 run-length pixels (0x426e04: a negative count copies that many bytes,
+  a positive one repeats the next byte, 0 ends). The palettes show different parts of the one
+  image: the first the Shiny Entertainment logo, the second the publishers' lines. Steps (timer
+  `0x57f1a4`): from black to palette 1 in 1 s (0x417040, colour (0, 0, 0)), 3 s (`0x495074`),
+  palette 1 to palette 2 at 0.5/s (`0x49506c`, 0x4170ec), 3 s, palette 2 to black in 1 s. Any
+  key (once all keys were released) goes straight to the menu.
 - The options sub-screens (sound options 0x42bb6c/0x42bbc0) don't replay MDK12 ✅ (they don't call 0x42618c).
 
 #### Menu attract slideshow (`MISC\MDKS_%3.3d.GIF`, 0x4279a0), not a video, but it replaces the FLC

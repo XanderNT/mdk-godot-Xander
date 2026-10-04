@@ -1,6 +1,8 @@
 ## The main menu: original background, texts and music. The original font isn't decoded yet.
 ## `MDK12.FLC` plays behind it each time it opens (0x4260e4), its last frame stays, then the
-## slideshow (`MenuSlideshow`); `MDKOPT` is the background when the video is missing.
+## slideshow (`MenuSlideshow`); `MDKOPT` is the background when the video is missing. At start,
+## after Kurt died and after the end movies the `INTRO1A` splash comes first (`IntroSplash`;
+## `--menu` skips it unless `--splash` is given too).
 ##
 ## Game command line options (`--level`, `--viewer`, `--screenshot`, …) skip the menu,
 ## unless `--menu` is given; `--options` and `--controls` open those screens; `--stats=N` shows the
@@ -61,11 +63,12 @@ func _ready() -> void:
 	_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	background.add_sibling(_video)
 	_slideshow = MenuSlideshow.new(_video, items)
-	if _video.play(MENU_VIDEO):
-		background.visible = false
-		_video.finished.connect(_slideshow.start)
+	var splash := GameState.splash and (not args.has("menu") or args.has("splash"))
+	GameState.splash = false
+	if splash:
+		_show_splash()
 	else:
-		_video.queue_free()
+		_start_video()
 
 	var song: Array = options.entries["MAINSONG"]
 	music.bus = &"Music"
@@ -86,6 +89,26 @@ func _ready() -> void:
 		if args.has("wait"):
 			await get_tree().create_timer(float(args.wait)).timeout
 		Args.screenshot_and_quit(get_tree(), args.screenshot)
+
+
+## The splash covers the menu, then the menu's video starts.
+func _show_splash() -> void:
+	items.visible = false
+	var splash := IntroSplash.new()
+	add_child(splash)
+	await splash.finished
+	splash.queue_free()
+	items.visible = true
+	items.get_child(0).grab_focus()
+	_start_video()
+
+
+func _start_video() -> void:
+	if _video.play(MENU_VIDEO):
+		background.visible = false
+		_video.finished.connect(_slideshow.start)
+	else:
+		_video.queue_free()
 
 
 func _process(delta: float) -> void:

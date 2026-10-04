@@ -30,6 +30,9 @@ var strike_used := false
 var stats := {}
 ## What the fall hands on to the level (`MDKFall`): `health` and `inventory` (a `KurtInventory`).
 var carry := {}
+## The `INTRO1A` splash shows when the main menu opens next: at start, after Kurt died and after
+## the end movies (not when a game is given up).
+var splash := true
 ## The level state of a full save being loaded (`MDKScriptRuntime.snapshot`, `Kurt.snapshot`).
 var snapshot := {}
 ## The town flags at the end of the level (`0x57440f`), for the debriefing.

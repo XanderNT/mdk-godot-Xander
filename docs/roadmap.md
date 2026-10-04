@@ -69,7 +69,6 @@
 
 ## Next
 
-1. **Videos**: the `INTRO1A` splash.
 2. **Menu**: the original font in the main menu, the gore option (taken as on), the level select.
 3. **Special materials**: mirrors, glass, animated water.
 4. **Small gaps**: doors moved into a newly loaded arena (`spawn_connector`), the fans' fire

@@ -301,6 +301,7 @@ func _on_level_ended(game_over: bool) -> void:
 ## Kurt died (`damp_control` ≈ 0x466b40): the death is counted, the level is saved as `LASTGAME`
 ## and the game goes back to the main menu, whose "Continue" starts the level again.
 func _on_kurt_died() -> void:
+	GameState.splash = true
 	GameState.level = level.number
 	GameState.deaths += 1
 	GameState.strike_used = scripts.air_strike.used_up if scripts.air_strike else false

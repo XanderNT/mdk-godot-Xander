@@ -1,6 +1,6 @@
 ## The end of the game (game state 8, 0x47727c): `MISC/FLIC/MDKEND.FLC` with its sounds from
 ## `MISC/FINISH.BNI` and a white flash (0x477604), then `MISC/FLIC/MDKBZK.MVE` (0x477870) and the
-## main menu (the original shows the `INTRO1A` splash first). See docs/gameplay.md, "Videos".
+## main menu, after the `INTRO1A` splash. See docs/gameplay.md, "Videos".
 ##
 ##   frame 1 DOGSHIP (loop) … 129 DROP, 133 FLYBY, 186 EXPLODE1, 188 DOGSHIP stops, 194 ENDEXP,
 ##   196 EXPLODE1, 210–232 whiter, 233 white for 1 s, 233–260 back
@@ -96,4 +96,5 @@ func _play(sound_name: String) -> void:
 
 func _to_menu() -> void:
 	played = true
+	GameState.splash = true
 	get_tree().change_scene_to_file(MENU)
