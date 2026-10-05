@@ -18,6 +18,14 @@ const QUIT_ROW := 3
 const YES_KEYS := [KEY_Y, KEY_J, KEY_O, KEY_S, KEY_T]
 const NO_KEY := KEY_N
 
+## `SEETHEWHOLEGAME`'s keys: LEVEL3–8, the fall of level index 4, the stream after index 0, and
+## random counts below 100 for the statistics ❓ (the original's range wasn't read).
+const DEBUG_FIRST_LEVEL := KEY_3
+const DEBUG_LAST_LEVEL := KEY_8
+const DEBUG_FALL_INDEX := 4
+const DEBUG_STREAM_INDEX := 0
+const DEBUG_STATS_MAX := 100
+
 ## The page shown, for Esc.
 enum Page { MAIN, QUIT, OTHER }
 
@@ -136,6 +144,9 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or not items.visible:
 		return
+	if _page == Page.MAIN and GameState.debug_keys and _debug_key(event.keycode):
+		get_viewport().set_input_as_handled()
+		return
 	if _page == Page.MAIN and event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
 		_show_quit()
@@ -144,6 +155,30 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif _page == Page.QUIT and event.keycode in [NO_KEY, KEY_ESCAPE]:
 		get_viewport().set_input_as_handled()
 		_show_main()
+
+
+## The debug keys of `SEETHEWHOLEGAME` (0x426574, 0x410018, 0x433b50, 0x431b00). Returns whether
+## the key was one of them.
+func _debug_key(keycode: Key) -> bool:
+	if keycode >= DEBUG_FIRST_LEVEL and keycode <= DEBUG_LAST_LEVEL:
+		GameState.level = keycode - KEY_0
+		get_tree().change_scene_to_file("res://game/main.tscn")
+		return true
+	match keycode:
+		KEY_F:
+			GameState.level = GameState.ORDER[DEBUG_FALL_INDEX]
+			get_tree().change_scene_to_file("res://game/fall/fall.tscn")
+		KEY_S:
+			GameState.level = GameState.ORDER[DEBUG_STREAM_INDEX]
+			get_tree().change_scene_to_file("res://game/stream/stream.tscn")
+		KEY_D:
+			for key: String in GameState.stats:
+				GameState.stats[key] = randi() % DEBUG_STATS_MAX
+			StatsScreen.briefing_only = false
+			get_tree().change_scene_to_file("res://game/menu/stats_screen.tscn")
+		_:
+			return false
+	return true
 
 
 func _show_quit() -> void:

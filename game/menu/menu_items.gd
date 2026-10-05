@@ -20,6 +20,9 @@ const BASELINE := 26.0 / 36.0
 const SMALL_FONT_ROW := 24.0
 const SPACE_BIG := 6
 const SPACE_SMALL := 4
+## The mouse cursor (0x42c010): `ARROW`, a one-frame sprite in `MDKFONT.FTI` (after its size).
+const CURSOR := "ARROW"
+const CURSOR_OFFSET := 4
 const SENSITIVITIES := [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
 ## The options screen's sounds (0x42bb6c): the `OPTSONG` loop on the music bus, so the music volume
 ## can be heard, and `OPTBUTT` on each change.
@@ -55,7 +58,20 @@ func setup(fti: MDKFti) -> void:
 	var palette := MDKPalette.from_rgb(fti.get_bytes("SYS_PAL").slice(0, 768))
 	_big = MDKFont.load_font(fti, "FONTBIG", palette, SPACE_BIG)
 	_small = MDKFont.load_font(fti, "FONTSML", palette, SPACE_SMALL)
+	_set_cursor(fti, palette)
 
+
+## The original's arrow as the mouse cursor, at the view's scale in the window.
+func _set_cursor(fti: MDKFti, palette: MDKPalette) -> void:
+	var sprite := MDKSpriteAnimation.parse(CURSOR, fti.get_bytes(CURSOR), CURSOR_OFFSET)
+	if sprite.frame_count < 1:
+		return
+	var frame := sprite.get_frame(0)
+	var image := palette.make_image(frame.width, frame.height, frame.indices, true)
+	var window := get_viewport_rect().size if is_inside_tree() else Vector2(DisplayServer.window_get_size())
+	var s := maxi(floori(minf(window.x / VIEW.x, window.y / VIEW.y)), 1)
+	image.resize(frame.width * s, frame.height * s, Image.INTERPOLATE_NEAREST)
+	Input.set_custom_mouse_cursor(image, Input.CURSOR_ARROW, Vector2(sprite.get_hotspot(0) * s))
 
 func _process(_delta: float) -> void:
 	_layout()

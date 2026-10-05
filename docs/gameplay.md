@@ -2253,9 +2253,11 @@ yes, N or Esc no). Kept from the port, not in the original: the "Level" item, th
 difficulty, gore, keys). Gore: `Settings.gore` (saved, default on), the switches `--bloodyes` and
 `--nobloodno`, and the cheat `TOOSCARYFORME` typed in a level (`runtime.option`); without it flesh
 sparks are blue, objects burst without slime, op 129 mode 2 blows nothing off, bullet holes are
-`BHOLE2` and the Score-O-matic leaves out the head shots. Not done: the original's options
-sub-pages, its mouse cursor (`ARROW`), the key repeat (30 ticks, then every 3), the debug mode of
-`SEETHEWHOLEGAME`.
+`BHOLE2` and the Score-O-matic leaves out the head shots. The mouse cursor is `ARROW` (scaled by
+whole steps to the window). The cheat `SEETHEWHOLEGAME` typed in a level turns on the main menu's
+debug keys (`GameState.debug_keys`): 3–8 start that level, F the fall of level index 4, S the
+stream after index 0, D the statistics with random counts (below 100 ❓). Not done: the
+original's options sub-pages, the key repeat (30 ticks, then every 3).
 
 ### Common machinery
 

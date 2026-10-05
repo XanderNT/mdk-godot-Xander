@@ -69,7 +69,7 @@
 
 ## Next
 
-2. **Menu**: the original's options sub-pages and mouse cursor, the `SEETHEWHOLEGAME` debug mode.
+2. **Menu**: the original's options sub-pages (the port keeps its own options page).
 
 ## Menu
 

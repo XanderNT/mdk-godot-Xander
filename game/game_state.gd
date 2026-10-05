@@ -30,6 +30,9 @@ var strike_used := false
 var stats := {}
 ## What the fall hands on to the level (`MDKFall`): `health` and `inventory` (a `KurtInventory`).
 var carry := {}
+## The cheat `SEETHEWHOLEGAME` (`0x5742bc`): in the main menu keys 3–8 start that level at once,
+## F the fall before the fifth level, S the first stream, D the statistics with random counts.
+var debug_keys := false
 ## The `INTRO1A` splash shows when the main menu opens next: at start, after Kurt died and after
 ## the end movies (not when a game is given up).
 var splash := true

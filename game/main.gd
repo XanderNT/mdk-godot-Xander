@@ -52,8 +52,9 @@ const END_MOVIE := "res://game/video/end_movie.tscn"
 const SNAPSHOT_KEY := KEY_F2
 ## The name prompt is drawn over the HUD and the pause menu.
 const SNAPSHOT_LAYER := 20
-## The cheat typed in a level that turns gore on or off (0x42c5f0).
+## Cheats typed in a level (0x42c5f0): gore on or off, and the main menu's debug keys.
 const GORE_CHEAT := "TOOSCARYFORME"
+const DEBUG_CHEAT := "SEETHEWHOLEGAME"
 
 ## The last letters typed, for the cheat.
 var _typed := ""
@@ -323,17 +324,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		_type(event.keycode)
 
 
-## Letters typed in a level: `TOOSCARYFORME` turns gore on or off (not saved).
+## Letters typed in a level: `TOOSCARYFORME` turns gore on or off (not saved), `SEETHEWHOLEGAME`
+## the main menu's debug keys (`0x5742bc`).
 func _type(keycode: Key) -> void:
 	if keycode < KEY_A or keycode > KEY_Z:
 		return
-	_typed = (_typed + OS.get_keycode_string(keycode)).right(GORE_CHEAT.length())
-	if _typed != GORE_CHEAT:
-		return
-	_typed = ""
-	Settings.gore = not Settings.gore
-	if scripts.vm:
-		scripts.option = 1 if Settings.gore else 0
+	_typed = (_typed + OS.get_keycode_string(keycode)).right(DEBUG_CHEAT.length())
+	if _typed.ends_with(GORE_CHEAT):
+		_typed = ""
+		Settings.gore = not Settings.gore
+		if scripts.vm:
+			scripts.option = 1 if Settings.gore else 0
+	elif _typed.ends_with(DEBUG_CHEAT):
+		_typed = ""
+		GameState.debug_keys = not GameState.debug_keys
 
 
 ## The level and Kurt for a full save (the save's header names this level).
