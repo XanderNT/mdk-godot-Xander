@@ -81,7 +81,7 @@ to look around, Shift to go faster.
 
 ## A C# / SDL3 version
 
-A rewrite of the port in C# on SDL3 has started (not published yet). It renders and collides like
+A rewrite of the port in C# on SDL3 has started: [mdk-sdl](https://github.com/nemo22/mdk-sdl). It renders and collides like
 the original (its BSP, as described in [docs/bsp.md](docs/bsp.md)) instead of through Godot's
 renderer and physics, and builds into a single native executable. It reuses this repository's
 knowledge base; so far Kurt walks the levels, without aliens or scripts.
