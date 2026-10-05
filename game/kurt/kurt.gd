@@ -1068,9 +1068,14 @@ func _update_vertical(delta: float, on_floor: bool) -> void:
 
 	if _jump_ticks_left > 0:
 		_jump_ticks_left = maxi(0, _jump_ticks_left - int(ceil(delta * TICKS)))
-	if not chute_open and jump_held and _jump_released and velocity.y < FALL_START_SPEED:
+	# Falling with the key held opens the chute, letting it go closes it (`damp_vertical` 0x4694bc);
+	# the key may be held since the take-off.
+	if not chute_open and jump_held and velocity.y < FALL_START_SPEED:
 		chute_open = true
 		play_sound("CHUTEOUT")
+	elif chute_open and not jump_held and not _fan_player.playing:
+		# In a fan's updraft the chute stays open (`_update_updraft`).
+		chute_open = false
 	if chute_open:
 		velocity.y -= CHUTE_GRAVITY * delta
 		if velocity.y < CHUTE_FALL_SPEED:
