@@ -1,7 +1,7 @@
 # MDK in Godot
 
 ![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Progress: about 80%](https://img.shields.io/badge/progress-~80%25-yellow)
+![Progress: about 88%](https://img.shields.io/badge/progress-~88%25-yellow)
 ![Godot 4.7](https://img.shields.io/badge/Godot-4.7-478cbf?logo=godotengine&logoColor=white)
 
 A port of [MDK](https://en.wikipedia.org/wiki/MDK_(video_game)) (Shiny Entertainment, 1997) to
@@ -15,23 +15,30 @@ files and executable (`MDKD3D.EXE`, the Direct3D version), and it aims to play l
 > port won't run.
 
 **Status: work in progress.** The six levels load and run with the original scripts, aliens,
-weapons, items and sniper mode, but the game can't be played through from start to end yet, so
-there's no release. See [the roadmap](docs/roadmap.md).
+weapons, items, rides and sniper mode, with the falls and streams between them, the briefings,
+statistics and the end videos. It's being played through and its bugs fixed, so there's no release
+yet. See [the roadmap](docs/roadmap.md).
 
 ## Progress
 
 | Area | Done |
 | --- | --- |
-| Data formats, levels, textures, skies | ██████████ 95% |
-| Kurt: movement, camera, chute, sliding, ledges, rides | █████████░ 92% |
-| Script VM, aliens, doors, bosses, cutscenes, arenas | █████████░ 93% |
-| Chain gun, items, sniper mode, air strike | █████████░ 90% |
-| HUD, menus, options, key bindings | ████████░░ 80% |
-| Sound and music | █████████░ 85% |
-| Level flow: briefing, statistics, saves | ████████░░ 80% |
+| Data formats, levels, textures, skies, glass, mirrors | ██████████ 98% |
+| Kurt: movement, camera, chute, sliding, ledges, rides | █████████░ 94% |
+| Script VM, aliens, doors, bosses, cutscenes, arenas | █████████░ 94% |
+| Chain gun, items, sniper mode, air strike | █████████░ 92% |
+| HUD, menus (original font and layout), options, key bindings | █████████░ 90% |
+| Sound and music | █████████░ 90% |
+| Level flow: briefing, statistics, saves (also F2 full saves) | █████████░ 90% |
 | The fall (`FALL3D`) and the stream between levels | █████████░ 90% |
-| End videos, enhanced graphics mode | ░░░░░░░░░░ 0% |
-| **Overall** | **about 80%** |
+| Intro and end videos (FLC, MVE) | ██████████ 100% |
+| Enhanced graphics mode (lighting, filtering, shadows, SSAO, fog) | ███████░░░ 70% |
+| Playtesting and bug fixing | ██████░░░░ 60% |
+| **Overall** | **about 88%** |
+
+Recent work: the enhanced graphics mode (Options → Graphics), the original menus, the `XD2` and
+`XE` rides, the gore option, animated delta textures (`M_COMM`), and fixes from playtesting
+(the chute, sniper screen, flickering wall details, walker riding).
 
 ## Screenshots
 
@@ -58,6 +65,7 @@ Open the project in Godot 4.7 and run it. Command line options (after `--`):
 - `--stats=N`, `--briefing=N`, `--fall=N`, `--stream=N`: the screens after LEVELn, its briefing,
   the fall before it or the stream after it.
 - `--screenshot=file.png`: save a screenshot and quit.
+- `--enhanced` / `--original`: the graphics mode for this run.
 - `--profile=seconds`: print performance and script statistics, then quit. `--no-scripts` disables
   the scripts.
 
@@ -70,6 +78,13 @@ PageUp/PageDown zoom), E or Enter to use the selected item (Tab, `[`, `]`, the m
 select it), Escape for the pause menu. In the fall before a level and the stream after it the
 movement keys steer Kurt and Escape skips them. In the level viewer: WASD to move, Q/E to go down/up, click
 to look around, Shift to go faster.
+
+## A C# / SDL3 version
+
+A rewrite of the port in C# on SDL3 has started (not published yet). It renders and collides like
+the original (its BSP, as described in [docs/bsp.md](docs/bsp.md)) instead of through Godot's
+renderer and physics, and builds into a single native executable. It reuses this repository's
+knowledge base; so far Kurt walks the levels, without aliens or scripts.
 
 ## Layout
 

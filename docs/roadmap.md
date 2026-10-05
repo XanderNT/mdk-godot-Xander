@@ -75,8 +75,8 @@
 
 - Main menu (new game, load game, options, quit), pause menu, level select, drawn in the original's
   font and layout (`MenuItems`); "Really Quit?" on Esc; gore as an option, switch and cheat.
-- Options: sound volumes, music filter, mouse, fullscreen, difficulty and key bindings (one key or
-  mouse button per action) are done; still to do: the enhanced mode below. The pause menu (Esc) has
+- Options: sound volumes, music filter, mouse, fullscreen, difficulty, gore, graphics (original or
+  enhanced, below) and key bindings (one key or mouse button per action). The pause menu (Esc) has
   resume, options, main menu, quit.
 - Original assets where possible (`MISC/OPTIONS.BNI`, `MISC/MDKFONT.FTI`, menu video `MDK12.FLC` and
   the `MDKS_*.GIF` slideshow, the end movies `MDKEND.FLC` and `MDKBZK.MVE`).
