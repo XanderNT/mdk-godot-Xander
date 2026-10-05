@@ -49,6 +49,14 @@ Recent work: the enhanced graphics mode (Options → Graphics), the original men
 | ![The end of a level](docs/screenshots/end_of_level.png) | ![The Score-O-matic](docs/screenshots/score.png) |
 | ![A briefing](docs/screenshots/briefing.png) | |
 
+## Downloads
+
+Test builds for Windows, Linux and macOS are on the
+[releases page](https://github.com/nemo22/mdk-godot/releases). Unpack one inside your MDK
+installation folder (for example `C:\GOG Games\MDK\mdk-godot\mdk-godot.exe`), or set
+`MDK_DATA_DIR` to that folder, and run it. Linux and macOS builds are untested; on macOS the app
+isn't notarized (right-click it and choose Open the first time).
+
 ## Running
 
 The original game data is required and isn't included; you need your own copy of MDK (for example

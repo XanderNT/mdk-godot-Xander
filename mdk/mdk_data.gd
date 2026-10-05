@@ -1,6 +1,10 @@
 ## Locates the original MDK game data and provides access to its files.
 extends Node
 
+## Folders above an exported executable searched for the game data (a release unpacked in the MDK
+## folder: `MDK/mdk-godot/mdk-godot.exe`; macOS: `MDK/MDK.app/Contents/MacOS/MDK`).
+const EXECUTABLE_PARENTS := 5
+
 ## The path to the MDK installation folder (contains `TRAVERSE`, `MISC`, …).
 var data_dir := ""
 
@@ -26,8 +30,12 @@ static func find_data_dir() -> String:
 		OS.get_environment("HOME").path_join(".wine/drive_c/GOG Games/MDK"),
 	]
 	if OS.has_feature("template"):
-		# Exported project placed within the MDK installation folder.
-		candidates.push_front(OS.get_executable_path().get_base_dir())
+		# Exported project placed within the MDK installation folder, maybe in a subfolder of it
+		# (macOS: inside the app bundle).
+		var dir := OS.get_executable_path().get_base_dir()
+		for level in EXECUTABLE_PARENTS:
+			candidates.push_front(dir)
+			dir = dir.get_base_dir()
 	var env_dir := OS.get_environment("MDK_DATA_DIR")
 	if not env_dir.is_empty():
 		candidates.push_front(env_dir)
