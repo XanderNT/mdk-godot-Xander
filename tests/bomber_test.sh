@@ -3,7 +3,7 @@
 # the view sinks into it, the script unlocks the controls and Kurt drops a bomb (`MDKBomber`).
 # Run from the project folder: sh tests/bomber_test.sh <godot executable>
 GODOT=${1:-godot}
-OUT=$(timeout 120 "$GODOT" --path . -- --level=7 --delay=0.5 --teleport=DANT_5,100,2320,-60 --bomber=drop --profile=0.5 2>&1 | grep -E "^riding|^bomber|XBN_BOMB|SCRIPT ERROR")
+OUT=$(timeout 120 "$GODOT" --audio-driver Dummy --path . -- --level=7 --delay=0.5 --teleport=DANT_5,100,2320,-60 --bomber=drop --profile=0.5 2>&1 | grep -E "^riding|^bomber|XBN_BOMB|SCRIPT ERROR")
 echo "$OUT"
 case "$OUT" in
 	*"SCRIPT ERROR"*) echo FAILED; exit 1 ;;

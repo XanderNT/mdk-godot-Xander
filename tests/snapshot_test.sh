@@ -4,8 +4,8 @@
 # script errors.
 # Run from the project folder: sh tests/snapshot_test.sh <godot executable>
 GODOT=${1:-godot}
-SAVED=$(timeout 90 "$GODOT" --path . -- --level=7 --delay=0.5 --walk=3 --snapshot=TESTSNAP 2>&1 | grep -E "^snapshot hash|SCRIPT ERROR")
-LOADED=$(timeout 90 "$GODOT" --path . -- --load=TESTSNAP --delay=0.5 --profile=3 2>&1 | grep -E "^restored hash|SCRIPT ERROR")
+SAVED=$(timeout 90 "$GODOT" --audio-driver Dummy --path . -- --level=7 --delay=0.5 --walk=3 --snapshot=TESTSNAP 2>&1 | grep -E "^snapshot hash|SCRIPT ERROR")
+LOADED=$(timeout 90 "$GODOT" --audio-driver Dummy --path . -- --load=TESTSNAP --delay=0.5 --profile=3 2>&1 | grep -E "^restored hash|SCRIPT ERROR")
 # The test save isn't left in the game's list (Godot's user folder on Windows or Linux).
 SAVES="${APPDATA:-$HOME/.local/share}/Godot/app_userdata/MDK/saves"
 [ -d "$SAVES" ] || SAVES="$HOME/.local/share/godot/app_userdata/MDK/saves"

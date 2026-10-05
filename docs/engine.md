@@ -386,7 +386,8 @@ their objects; an arena in neither slot any more stops its objects' loop sounds,
 when it comes back, and Kurt's thrown items there go. Rays (`raycast`) stop only on Kurt's arena
 and the second one; Kurt collides only with his arena and the active second one
 (`Level.set_solid_arenas`). The port picks his arena by its box among the connected ones, not by
-crossing the connections. Not done: doors aren't moved into a newly loaded arena. Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
+crossing the connections. A door that already links the two arenas is moved into the arena whose
+script asks for it, unless it's in Kurt's or the second arena (`spawn_connector`). Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
 with the aliens, with flags 0x2008a0 and 1 health.
 
 ### Doors (0x43cc68)
@@ -1057,8 +1058,8 @@ every tick; sparks as flat vertex-coloured triangles, `colour = base + range × 
 trails are `MDKEffects` `TRAIL` sprites. `MDKScriptRuntime.spark()` makes the bursts (kinds
 `FLESH`, `HARD`, `GROUP`, `FIRE`; flesh sparks are green with gore, blue without: `Settings.gore`, see gameplay.md "Menus"), and
 `explode()` the break-up, gore drops, white flash and pitch thresholds; the nuke adds its 16 fire
-sparks. Test: `--sparks`. Not done: fire sparks for the fans (they're
-`CPUParticles3D`), the "is the pool empty" rule of the ricochet sound.
+sparks. Test: `--sparks`. The fans let out their fire sparks (`MDKFans.update`, still at their
+point, lifted by the updraft with mask 8 like every piece).
 
 ## Shattered triangle groups (`shatter_group` 137–139, 0x40c828)
 

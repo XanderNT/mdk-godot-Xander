@@ -1,12 +1,20 @@
 ## Fans (updrafts) of the arenas (`arena+0x45e`): created on the arena's type-7 hotspots by
 ## `fan_create` (0x413a94), they lift Kurt and objects inside their box (`updraft_query` 0x413c24
-## → 0x413d14) and show rising particles (0x414230). See `docs/engine.md` ("Fans and conveyors").
+## → 0x413d14), and each tick, with a chance of 1 in 8, a fire spark appears at a random point of
+## the box (z0 + 0.25, no speed) for the updraft to lift (0x414230, enabled or not). See `docs/engine.md` ("Fans and conveyors").
 class_name MDKFans
 extends RefCounted
 
 ## Who asks: Kurt (1) or an object (2); a fan acts on those whose bit is in its mask.
 const MASK_KURT := 1
 const MASK_OBJECTS := 2
+## Sparks and pieces (0x4061d8).
+const MASK_EFFECTS := 8
+## A spark with a chance of 1 in 8 a tick (`rand() & 7`), half a unit big, just above the bottom of
+## the box.
+const SPARK_CHANCE_MASK := 7
+const SPARK_SIZE := 0.5
+const SPARK_LIFT := 0.25
 ## Type 6 fans lift at full strength up to 5 units below their top, then less and less (0.2 per
 ## unit); the box reaches 5 units above the top.
 const TOP := 5.0
@@ -31,7 +39,6 @@ class Fan:
 	var mask := -1
 	var box_start := Vector3()
 	var box_end := Vector3()
-	var particles: CPUParticles3D
 
 
 var runtime: MDKScriptRuntime
@@ -62,7 +69,6 @@ func create(arena: String, hotspot: int, fan_name: String, param: int, type: int
 	fan.strength = strength
 	if type == 6:
 		fan.strength = (record.box_end.z - record.position.z) / (strength - 0.5)
-	fan.particles = _make_particles(fan)
 	_fans.push_back(fan)
 
 
@@ -70,7 +76,6 @@ func create(arena: String, hotspot: int, fan_name: String, param: int, type: int
 func remove(arena: String, fan_name: String) -> void:
 	for fan in _fans:
 		if fan.arena == arena and fan.name == fan_name:
-			fan.particles.queue_free()
 			_fans.erase(fan)
 			return
 
@@ -80,7 +85,6 @@ func enable(arena: String, fan_name: String, enabled: bool) -> void:
 	for fan in _fans:
 		if fan.arena == arena and fan.name == fan_name:
 			fan.mask = fan.mask | 1 if enabled else fan.mask & ~1
-			fan.particles.emitting = fan.mask & (MASK_KURT | MASK_OBJECTS) != 0
 
 
 ## The fans for a full save.
@@ -103,13 +107,21 @@ func restore(data: Array) -> void:
 		# The strength as it was, not as `create` works it out from the box.
 		fan.strength = entry.strength
 		fan.mask = entry.mask
-		fan.particles.emitting = fan.mask & (MASK_KURT | MASK_OBJECTS) != 0
 
 
 func clear() -> void:
-	for fan in _fans:
-		fan.particles.queue_free()
 	_fans.clear()
+
+
+## Each tick: the fans of the arenas Kurt can see let out their sparks.
+func update() -> void:
+	var fire: Vector2i = MDKScriptRuntime.SPARK_COLOURS[MDKScriptRuntime.Spark.FIRE]
+	for fan in _fans:
+		if not runtime.is_live_arena(fan.arena) or randi() & SPARK_CHANCE_MASK:
+			continue
+		var point := Vector3(randf_range(fan.box_start.x, fan.box_end.x), randf_range(fan.box_start.y, fan.box_end.y),
+				fan.box_start.z + SPARK_LIFT)
+		runtime.debris.spark(fan.arena, point, 1, SPARK_SIZE, fire.x, fire.y, 1.0, MDKDebris.Launch.STILL)
 
 
 ## The vertical speed for something at `point` (MDK coordinates) in `arena` going up or down at
@@ -175,33 +187,3 @@ func _find_hotspot(arena: String, id: int) -> Dictionary:
 				return record
 	return {}
 
-
-## The original spawns a rising particle at a random point of the box one frame in 8.
-func _make_particles(fan: Fan) -> CPUParticles3D:
-	var particles := CPUParticles3D.new()
-	var start := MDKMeshBuilder.to_godot(fan.box_start)
-	var end := MDKMeshBuilder.to_godot(fan.box_end)
-	var bottom_center := Vector3((start.x + end.x) * 0.5, start.y + 0.25, (start.z + end.z) * 0.5)
-	var height := end.y - start.y
-	var speed := maxf(fan.strength, 1.0)
-	particles.position = bottom_center
-	particles.amount = 12
-	particles.lifetime = height / speed
-	particles.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	particles.emission_box_extents = Vector3(absf(end.x - start.x) * 0.5, 0.0, absf(end.z - start.z) * 0.5)
-	particles.direction = Vector3.UP
-	particles.spread = 0.0
-	particles.gravity = Vector3.ZERO
-	particles.initial_velocity_min = speed
-	particles.initial_velocity_max = speed
-	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.6, 0.6)
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(1, 1, 1, 0.6)
-	mesh.material = material
-	particles.mesh = mesh
-	runtime.add_child(particles)
-	return particles

@@ -4,7 +4,7 @@
 # wall (triangle group 3) on the way: after 12 seconds he's past y 4500.
 # Run from the project folder: sh tests/snowboard_test.sh <godot executable>
 GODOT=${1:-godot}
-OUT=$(timeout 60 "$GODOT" --path . -- --level=4 --delay=0.5 --teleport=CMEAT_3,420,4285,-570 --profile=12 2>&1 | grep "^riding\|^Kurt at")
+OUT=$(timeout 60 "$GODOT" --audio-driver Dummy --path . -- --level=4 --delay=0.5 --teleport=CMEAT_3,420,4285,-570 --profile=12 2>&1 | grep "^riding\|^Kurt at")
 echo "$OUT"
 Y=$(echo "$OUT" | sed -n 's/^Kurt at ([^,]*, \([-0-9.]*\),.*/\1/p')
 case "$OUT" in

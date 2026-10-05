@@ -4,7 +4,7 @@
 # connection (or another teleport).
 # Run from the project folder: sh tests/teleport_arena_test.sh <godot executable>
 GODOT=${1:-godot}
-OUT=$(timeout 60 "$GODOT" --path . -- --level=8 --delay=0.5 --teleport=GUNT_9,-20,70,5 --profile=3 2>&1 | grep "^FPS")
+OUT=$(timeout 60 "$GODOT" --audio-driver Dummy --path . -- --level=8 --delay=0.5 --teleport=GUNT_9,-20,70,5 --profile=3 2>&1 | grep "^FPS")
 echo "$OUT"
 case "$OUT" in
 	*"arena GUNT_9,"*) echo PASSED ;;

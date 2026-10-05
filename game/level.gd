@@ -8,6 +8,9 @@ const CONNECTION := 6
 ## Triangle flags changed by scripts (`group_set_state`): hidden, and not solid.
 const TRIANGLE_HIDDEN := 0x10
 const TRIANGLE_NOT_SOLID := 0x20
+## Sky modes (`show_sky`).
+const SKY_SHOWN := 0
+const SKY_BLACK := 1
 ## Arena collision layers: every arena is on the ray layer; only Kurt's and the active second one
 ## are also on Kurt's layer (`damp_collide_move` 0x465e34).
 const RAY_LAYER := 1
@@ -43,6 +46,7 @@ var arena_pitch := {}
 var arena_groups := {}
 ## The level's glass and mirrors.
 var specials: MDKSpecialMaterials
+var _environment: Environment
 ## The arenas Kurt collides with (all until `set_solid_arenas`).
 var solid_arenas: Array[String] = []
 
@@ -337,6 +341,20 @@ func set_solid_arenas(arena_names: Array[String]) -> void:
 			(group.shape.get_parent() as StaticBody3D).collision_layer = layer
 
 
+## How the background is drawn (`0x574304`, sky_draw 0x475b4c): 0 the sky, 1 black, −1 nothing
+## (what was drawn before stays).
+func show_sky(mode: int) -> void:
+	if not _environment:
+		return
+	match mode:
+		SKY_SHOWN:
+			_environment.background_mode = Environment.BG_SKY
+		SKY_BLACK:
+			_environment.background_mode = Environment.BG_COLOR
+		_:
+			_environment.background_mode = Environment.BG_KEEP
+
+
 ## The DTI records of an arena (see `MDKDti`).
 func get_arena_records(arena_name: String) -> Array:
 	for entry in dti.arenas:
@@ -431,6 +449,8 @@ func _setup_sky() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
+	environment.background_color = Color.BLACK
+	_environment = environment
 	var world_environment := WorldEnvironment.new()
 	world_environment.environment = environment
 	add_child(world_environment)

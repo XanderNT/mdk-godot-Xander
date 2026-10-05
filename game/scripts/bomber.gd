@@ -136,11 +136,16 @@ func _drop() -> void:
 	# Right is (s, −c), the top of the view is the heading (c, s).
 	var direction := Vector3(s * offset.x - c * offset.y, -c * offset.x - s * offset.y, -FOCAL)
 	var end := kurt_position + direction * RAY_LENGTH
-	var hit := _runtime.raycast(kurt_position, end)
+	# Objects first (0x46428c flag 1), then the arena up to them (flag 2).
 	var target := end
+	var object_hit: Variant = _first_object(kurt_position, end)
+	if object_hit != null:
+		target = object_hit
+	var hit := _runtime.raycast(kurt_position, target)
 	var time := MISS_TIME
 	if not hit.is_empty():
 		target = MDKScriptRuntime.to_mdk(hit.position)
+	if not hit.is_empty() or object_hit != null:
 		time = sqrt(maxf(start.z - target.z, 0.0) * 2.0 / GRAVITY)
 	if time <= 0.0:
 		time = MISS_TIME
@@ -155,6 +160,25 @@ func _drop() -> void:
 	bomb.friction = 0.0
 	bomb.velocity = Vector3((target.x - start.x) / time, (target.y - start.y) / time, 0.0)
 	bomb.loop_sound = _runtime.mixer.play_on("DROP", bomb)
+
+
+## Where the segment first meets a part of an object of Kurt's arena (alive, not flagged 0x30: the
+## hidden `XE` doesn't count), or null.
+func _first_object(start: Vector3, end: Vector3) -> Variant:
+	var nearest: Variant = null
+	for obj in _runtime.objects:
+		if obj.dead or obj.health == 0 or obj.arena != _runtime.current_arena or not obj.model 				or obj.flags & (MDKObject.FLAG_NOT_SOLID | MDKObject.FLAG_NOT_TARGET):
+			continue
+		if _runtime.get_world_bounds(obj).intersects_segment(start, end) == null:
+			continue
+		var parts := obj.get_part_bounds()
+		for i in parts.size():
+			if obj.hidden_parts & (1 << i):
+				continue
+			var point: Variant = _runtime.get_world_bounds(obj, parts[i]).intersects_segment(start, end)
+			if point != null and (nearest == null or start.distance_to(point) < start.distance_to(nearest)):
+				nearest = point
+	return nearest
 
 
 ## Hits on Kurt went to the `XE` (`MDKRides.takes_hits`); Kurt takes them, and if he dies the `XE`

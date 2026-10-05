@@ -81,8 +81,12 @@ var kurt_yaw := 0.0
 var alien_target: MDKObject
 ## Ticks the alarm keeps sounding (`0x573aec`), set by objects with movement command 15.
 var alarm_ticks := 0
-## How the sky is drawn (`0x574304`, opcode 202): 0 normally.
-var sky_mode := 0
+## How the sky is drawn (`0x574304`, opcode 202): 0 normally, 1 black, −1 not drawn.
+var sky_mode := 0:
+	set(value):
+		sky_mode = value
+		if level:
+			level.show_sky(value)
 ## Gore (`if_option`, the original's `0x5742dc`): 1 on, 0 off; from `Settings.gore`, toggled by
 ## the cheat `TOOSCARYFORME`.
 var option := 1
@@ -171,6 +175,8 @@ func setup(p_level: Level, p_kurt: Kurt) -> void:
 	debris = MDKDebris.new()
 	debris.level = level
 	debris.trail = effects.spawn_trail
+	debris.updraft = func(arena_name: String, point: Vector3, vz: float, dt: float) -> float:
+		return fans.query(arena_name, point, vz, MDKFans.MASK_EFFECTS, dt)
 	add_child(debris)
 	sniper_rounds = MDKSniperRounds.new()
 	sniper_rounds.runtime = self
@@ -451,6 +457,7 @@ func _tick() -> void:
 		vm.run(get_arena_state(second_arena).controller)
 	items.update_twisters()
 	effects.update(1.0)
+	fans.update()
 	debris.update(1.0)
 	sniper_rounds.update(1.0)
 	air_strike.update(1.0)
@@ -1301,8 +1308,9 @@ func _update_bar() -> void:
 ## Sparks where a shot hits (`0x41e8f4`); a ricochet sound (the object's, set by opcode 26, or
 ## `RICO1`–`RICO3`) every 4 ticks.
 func spark(point: Vector3, count: int, sound_name := "", kind := Spark.FLESH) -> void:
-	# The ricochet every 4 frames (always for bursts).
-	if count > 1 or _tick_count & 3 == 0:
+	# The ricochet every 4 frames, always for bursts and when the arena has no effects (0x4052d4).
+	var quiet := not effects.has_effects(current_arena) and not debris.has_pieces(current_arena)
+	if quiet or count > 1 or _tick_count & 3 == 0:
 		play_sound_at(sound_name if not sound_name.is_empty() else ["RICO1", "RICO2", "RICO3"][randi() % 3], point)
 	var colours: Vector2i = SPARK_COLOURS[kind] if kind != Spark.FLESH or option else SPARK_FLESH_NO_GORE
 	debris.spark(current_arena, point, count, SPARK_SIZE, colours.x, colours.y, SPARK_SLOW if kind == Spark.HARD else 1.0)
@@ -1538,7 +1546,8 @@ func spawn_connector(obj: MDKObject, type_name: String, mdk_position: Vector3, y
 		return
 	for other in objects:
 		if not other.dead and other.type_name == type_name and ((other.arena == obj.arena and other.connects == other_arena) or (other.arena == other_arena and other.connects == obj.arena)):
-			if other.arena != current_arena:
+			# A door Kurt can see (his arena or the second one) stays where it is.
+			if other.arena != current_arena and other.arena != second_arena:
 				other.arena = obj.arena
 				other.connects = other_arena
 			return

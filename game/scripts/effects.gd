@@ -21,6 +21,8 @@ const BURST_TICKS := 30
 
 class Effect:
 	var kind := Kind.DROP
+	## The arena whose pool holds it.
+	var arena := ""
 	var sprite: Sprite3D
 	var frames := 1
 	var position := Vector3()
@@ -92,6 +94,11 @@ func spawn_bubble(arena_name: String, point: Vector3) -> void:
 		effect.life = 64
 
 
+## Whether an arena has any effect.
+func has_effects(arena_name: String) -> bool:
+	return _effects.any(func(effect: Effect) -> bool: return effect.arena == arena_name)
+
+
 func _create(arena_name: String, texture_name: String, kind: Kind, point: Vector3, scale: float, speed: float) -> Effect:
 	if _effects.size() >= MAX_EFFECTS:
 		return null
@@ -100,6 +107,7 @@ func _create(arena_name: String, texture_name: String, kind: Kind, point: Vector
 		return null
 	var effect := Effect.new()
 	effect.kind = kind
+	effect.arena = arena_name
 	effect.position = point
 	effect.scale = scale
 	effect.speed = speed

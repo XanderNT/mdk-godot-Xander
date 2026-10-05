@@ -912,10 +912,10 @@ drops `XBN_BOMB`s on the ground aliens with a cursor. Mode `0x573c34` = `0x40031
 (`0x491e18`).
 
 **In the port** (`MDKBomber`, `BomberOverlay`, `FollowCamera._update_bomber_view`): all of it, test
-`tests/bomber_test.sh` (`--bomber[=drop]`). Differences: the aiming ray tests the arena only (not
-objects); the mouse moves the cursor by a third of its screen motion; the sky mode −1 (no sky)
-isn't drawn differently; damage passed to Kurt goes through `Kurt.hurt` (it honours
-invulnerability, unlike 0x46a77c).
+`tests/bomber_test.sh` (`--bomber[=drop]`). The aiming ray tests the parts of the arena's objects,
+then the arena; the sky modes 1 (black) and −1 (nothing drawn: `Environment.BG_KEEP`) are
+`Level.show_sky`. Differences: the mouse moves the cursor by a third of its screen motion; damage
+passed to Kurt goes through `Kurt.hurt` (it honours invulnerability, unlike 0x46a77c).
 
 #### Globals
 

@@ -27,6 +27,10 @@ const LIFE_MIN := 60
 const RAND_HALF := 0x4000
 ## Pieces start 2 units above the object.
 const BREAK_UP_RISE := 2.0
+const TICKS := 30.0
+
+## How a spark starts: flying off at random, or still at its point (the fans' sparks).
+enum Launch { RANDOM, STILL }
 
 
 class Piece:
@@ -54,6 +58,9 @@ var level: Level
 var _spark_material := StandardMaterial3D.new()
 ## Leaves a smoke puff: `(arena name, point)` (see `MDKEffects.spawn_trail()`).
 var trail: Callable
+## The fans' push: `(arena name, point, vertical speed in u/s, seconds)` → the new speed, or NAN
+## outside every fan (`MDKFans.query` with mask 8).
+var updraft: Callable
 var _pieces: Array[Piece] = []
 var _mesh := MeshInstance3D.new()
 
@@ -130,7 +137,7 @@ func _split(corners: PackedVector3Array, uvs: PackedVector2Array, material: Mate
 
 ## Sparks (0x41e8f4, 0x4052d4) at `point`: `size` 0.5 or 1.0, palette colours `base` to
 ## `base + range` (e.g. 3, 3: green), velocity scaled by `speed`.
-func spark(arena_name: String, point: Vector3, count: int, size: float, base: int, range: int, speed := 1.0) -> void:
+func spark(arena_name: String, point: Vector3, count: int, size: float, base: int, range: int, speed := 1.0, launch := Launch.RANDOM) -> void:
 	for i in count:
 		if _pieces.size() >= MAX_PIECES:
 			return
@@ -145,6 +152,10 @@ func spark(arena_name: String, point: Vector3, count: int, size: float, base: in
 		piece.colour_range = range
 		piece.center = point + Vector3(_rand_half() / 16384.0, _rand_half() / 16384.0, _rand_half() / 32768.0)
 		_launch(piece, arena_name, speed)
+		# The fans' sparks stand exactly at their point (0x414230 sets it after 0x4052d4).
+		if launch == Launch.STILL:
+			piece.velocity = Vector3.ZERO
+			piece.center = point
 		# Only the bigger sparks can trail.
 		if s < 1.0:
 			piece.trail_every = 0
@@ -194,6 +205,11 @@ func _rand_half() -> int:
 	return randi() % 32768 - RAND_HALF
 
 
+## Whether an arena has any piece or spark.
+func has_pieces(arena_name: String) -> bool:
+	return _pieces.any(func(piece: Piece) -> bool: return piece.arena == arena_name)
+
+
 func piece_count() -> int:
 	return _pieces.size()
 
@@ -215,6 +231,11 @@ func update(ticks: float) -> void:
 		if hit.is_empty():
 			piece.center += motion
 			piece.velocity.z -= GRAVITY * ticks
+			# Fans push sparks and pieces (mask 8): their speed is in units per tick.
+			if updraft.is_valid():
+				var vz: float = updraft.call(piece.arena, piece.center, piece.velocity.z * TICKS, ticks / TICKS)
+				if not is_nan(vz):
+					piece.velocity.z = vz / TICKS
 		else:
 			piece.center = MDKScriptRuntime.to_mdk(hit.position)
 			var normal := MDKScriptRuntime.to_mdk(hit.normal)
