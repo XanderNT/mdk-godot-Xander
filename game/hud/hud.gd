@@ -112,9 +112,13 @@ func _draw() -> void:
 	if kurt.white_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, minf(kurt.white_flash / 255.0, 1.0)))
 	if kurt.sniping:
-		# The sniper screen covers the whole 640×480 screen, centred.
+		# The sniper screen covers the whole 640×480 screen, centred; beside it (a wider window) black.
 		var s1 := size.y / SniperOverlay.SCREEN.y
-		draw_set_transform(Vector2((size.x - SniperOverlay.SCREEN.x * s1) / 2.0, 0.0), 0.0, Vector2(s1, s1))
+		var left := (size.x - SniperOverlay.SCREEN.x * s1) / 2.0
+		if left > 0.0:
+			draw_rect(Rect2(0.0, 0.0, ceilf(left), size.y), Color.BLACK)
+			draw_rect(Rect2(floorf(size.x - left), 0.0, ceilf(left), size.y), Color.BLACK)
+		draw_set_transform(Vector2(left, 0.0), 0.0, Vector2(s1, s1))
 		_sniper.draw(self, kurt, scripts.sniper_rounds if scripts else null)
 		# Health in the frame's panel, where the normal view draws `SC_STAT` in the 600×360 view.
 		var panel := SniperOverlay.VIEW_ORIGIN + Vector2(600 - (_panel.get_width() + 16), VIEW_HEIGHT - (_panel.get_height() + 10))
