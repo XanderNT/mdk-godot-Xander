@@ -70,7 +70,6 @@
 ## Next
 
 2. **Menu**: the original's options sub-pages and mouse cursor, the `SEETHEWHOLEGAME` debug mode.
-3. **Special materials**: mirrors, glass, animated water.
 4. **Small gaps**: doors moved into a newly loaded arena (`spawn_connector`), the fans' fire
    sparks, the ricochet sound's "pool empty" rule, the `XE` aim ray against objects, sky mode −1.
 

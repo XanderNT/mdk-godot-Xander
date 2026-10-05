@@ -41,6 +41,8 @@ var arena_bounds := {}
 var arena_pitch := {}
 ## Arena name to its triangle groups (group number to `TriangleGroup`).
 var arena_groups := {}
+## The level's glass and mirrors.
+var specials: MDKSpecialMaterials
 ## The arenas Kurt collides with (all until `set_solid_arenas`).
 var solid_arenas: Array[String] = []
 
@@ -66,6 +68,7 @@ func load_level(p_number: int) -> void:
 	mto = MDKMto.load_file(MDKData.path(dir + "LEVEL%dO.MTO" % number))
 	level_textures = MDKTextureArchive.load_file(MDKData.path(dir + "LEVEL%dS.MTI" % number))
 	cmi = MDKCmi.load_file(MDKData.path(dir + "LEVEL%d.CMI" % number))
+	specials = MDKSpecialMaterials.new(dti)
 	var overlays := MDKSni.load_file(MDKData.path(dir + "LEVEL%dO.SNI" % number))
 	sound_archives = [MDKSni.load_file(MDKData.path("TRAVERSE/TRAVERSE.SNI")),
 			MDKSni.load_file(MDKData.path(dir + "LEVEL%dS.SNI" % number)), overlays]
@@ -101,6 +104,7 @@ func load_level(p_number: int) -> void:
 		var archives: Array[MDKTextureArchive] = [arena.textures, level_textures]
 		archives.append_array(all_archives)
 		var resolver := MDKMeshBuilder.MaterialResolver.new(palette, archives)
+		resolver.specials = specials
 		_arenas[arena_name] = arena
 		_resolvers[arena_name] = resolver
 		var root := Node3D.new()

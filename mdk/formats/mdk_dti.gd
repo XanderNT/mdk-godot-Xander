@@ -3,6 +3,9 @@
 class_name MDKDti
 extends RefCounted
 
+## `GLASS1`–`GLASS4`.
+const GLASS_COUNT := 4
+
 var bytes := PackedByteArray()
 var palette: MDKPalette
 
@@ -23,6 +26,11 @@ var sky_offset := 0
 ## Palette indices used to fill the screen above and below the panorama.
 var sky_top_color := 0
 var sky_bottom_color := 0
+## The panorama mirrors show (`MIRRLOW`…`MIRRHIGH`): the second one where the level has it (levels 5
+## and 6), else the sky.
+var mirror_sky: MDKTexture
+## `GLASS1`–`GLASS4`: colour and opacity (block 0, after the sky fields).
+var glass: Array[Color] = []
 ## Arenas and corridors (`HMO_n`, `CHMO_n`), in file order. Each is a Dictionary with
 ## `name`, `value` (the camera pitch in degrees, positive looks down) and `records` (Array of Dictionaries with `type`, `id`, `angle`, `position`, `box_end`, `name`).
 var arenas: Array[Dictionary] = []
@@ -36,6 +44,15 @@ static func load_file(path: String) -> MDKDti:
 		return null
 	dti._parse()
 	return dti
+
+
+func _panorama(offset: int, height: int) -> MDKTexture:
+	var texture := MDKTexture.new()
+	texture.name = "SKY"
+	texture.width = sky_wrap_width + 4
+	texture.height = height
+	texture.indices = bytes.slice(offset, offset + texture.width * texture.height)
+	return texture
 
 
 func _block(index: int) -> int:
@@ -58,19 +75,18 @@ func _parse() -> void:
 	sky_offset = r0.u32()
 	sky_wrap_width = r0.u32()
 	var sky_height := r0.u32()
-	# If positive, the level has a second panorama (levels 5 and 6); the Direct3D renderer uses it.
+	# If positive, the level has a second panorama (levels 5 and 6), for the mirrors only.
 	var second_sky_top_color := r0.s32()
 	var _second_sky_bottom_color := r0.s32()
+	for i in GLASS_COUNT:
+		var rgba := [r0.u32(), r0.u32(), r0.u32(), r0.u32()]
+		glass.push_back(Color8(rgba[0], rgba[1], rgba[2], rgba[3]))
 
 	# Block 4: sky panorama(s) (each row has 4 extra pixels for wrapping).
-	sky = MDKTexture.new()
-	sky.name = "SKY"
-	sky.width = sky_wrap_width + 4
-	sky.height = sky_height
-	var sky_pixels := _block(4)
+	sky = _panorama(_block(4), sky_height)
+	mirror_sky = sky
 	if second_sky_top_color > 0:
-		sky_pixels += sky.width * sky.height
-	sky.indices = bytes.slice(sky_pixels, sky_pixels + sky.width * sky.height)
+		mirror_sky = _panorama(_block(4) + sky.width * sky.height, sky_height)
 
 	# Block 2: arenas and corridors, with their object records.
 	var r := BinReader.new(bytes, _block(2))

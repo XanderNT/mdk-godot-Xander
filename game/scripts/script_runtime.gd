@@ -1849,6 +1849,7 @@ func get_resolver(arena_name: String) -> MDKMeshBuilder.MaterialResolver:
 		if arena:
 			archives.push_front(arena.textures)
 		_resolvers[arena_name] = MDKMeshBuilder.MaterialResolver.new(palette, archives)
+		_resolvers[arena_name].specials = level.specials
 		# Some models have flat parts seen from both sides (e.g. the petals of iris doors).
 		_resolvers[arena_name].double_sided = true
 	return _resolvers[arena_name]

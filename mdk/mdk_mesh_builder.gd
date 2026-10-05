@@ -13,6 +13,10 @@ const SPECIAL_MIRROR_LAST := 1010
 const SPECIAL_GLASS_FIRST := 1024  # `GLASS1`–`GLASS4`.
 const SPECIAL_GLASS_LAST := 1027
 const SPECIAL_RIPPLE := 1028  # Water.
+## Arena triangle flags (0x40b7f0): bit 23 outlines the triangle in its own colour, along the edges
+## bits 20 (v0–v1), 21 (v1–v2) and 22 (v2–v0) pick.
+const OUTLINE := 1 << 23
+const OUTLINE_EDGES := [[1 << 20, 0, 1], [1 << 21, 1, 2], [1 << 22, 2, 0]]
 
 
 ## Resolves MDK material references (texture names, palette colors) to Godot materials.
@@ -25,6 +29,8 @@ class MaterialResolver:
 	var missing: Array[String] = []
 	## Draw both faces of triangles (models).
 	var double_sided := false
+	## The level's glass and mirrors; without them special values get placeholder colours.
+	var specials: MDKSpecialMaterials
 
 	var _texture_materials := {}
 	var _color_materials := {}
@@ -74,6 +80,8 @@ class MaterialResolver:
 		if not _color_materials.has(index):
 			if index < 256:
 				_color_materials[index] = MDKMeshBuilder.make_color_material(palette.get_color(index), double_sided)
+			elif specials:
+				_color_materials[index] = specials.get_material(index)
 			else:
 				_color_materials[index] = MDKMeshBuilder.make_special_material(index)
 		if not _color_materials[index]:
@@ -122,7 +130,31 @@ static func build_arena_mesh(arena: MDKArena, resolver: MaterialResolver, triang
 		arrays[Mesh.ARRAY_TEX_UV] = uvs
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
+		_add_outlines(mesh, arena, surface_triangles, material)
 	return mesh
+
+
+## The outlined edges of untextured triangles (glass panes get coloured frames), as lines in the
+## triangles' material.
+static func _add_outlines(mesh: ArrayMesh, arena: MDKArena, triangles: PackedInt32Array, material: Material) -> void:
+	if material.has_meta(&"uv_scale"):
+		return
+	var lines := PackedVector3Array()
+	for tri in triangles:
+		var flags := arena.triangle_flags[tri]
+		if not flags & OUTLINE:
+			continue
+		for edge: Array in OUTLINE_EDGES:
+			if flags & edge[0]:
+				lines.push_back(to_godot(arena.vertices[arena.triangle_indices[tri * 3 + edge[1]]]))
+				lines.push_back(to_godot(arena.vertices[arena.triangle_indices[tri * 3 + edge[2]]]))
+	if lines.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = lines
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
 
 ## Builds the mesh of a model in a given pose (the vertices of each part, see `MDKModel.get_rest_pose()`
@@ -193,7 +225,8 @@ static func make_palette_material(texture: MDKTexture, palette: MDKPalette, doub
 	return material
 
 
-## Placeholder materials for special surfaces, until their effects are reverse engineered.
+## Placeholder materials for special surfaces where the level's (`MDKSpecialMaterials`) aren't
+## known (the fall, the stream, the statistics, the model viewer).
 static func make_special_material(value: int) -> Material:
 	var color: Color
 	if value >= SPECIAL_MIRROR_FIRST and value <= SPECIAL_MIRROR_LAST:

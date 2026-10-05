@@ -59,8 +59,8 @@ Index 0 is forced to black and is transparent in sprites. Sprites (`BNI`) only u
 | 0x20 | u32 | Sky: horizontal offset in pixels ✅ |
 | 0x24 | u32 | Sky: panorama width for 360° (1800 or 900) ✅ |
 | 0x28 | u32 | Sky: panorama height (360) ✅ |
-| 0x2C | s32[2] | If positive, there's a second panorama and these are its fill colors (levels 5, 6). The Direct3D renderer draws the second panorama. 🟡 |
-| 0x34 | 4 × u32[4] | Colors ❓ |
+| 0x2C | s32[2] | If positive, there's a second panorama and these are its fill colors (levels 5, 6). The sky is the first panorama; the second is only shown by mirrors (0x474694, 0x475860) ✅. |
+| 0x34 | 4 × u32[4] | `GLASS1`–`GLASS4`: R, G, B, alpha (0–255) ✅ |
 
 ### Block 1 🟡
 
@@ -181,10 +181,170 @@ track:
      special material (see below) if `-material` ≥ 256.
    - UVs are in texels (textures repeat, e.g. floors).
    - `flags`: top byte = triangle group (see [engine.md](engine.md#arena-triangle-groups));
-     0x10 not drawn and 0x20 not solid (set only by scripts); bits 20–22 look like a light level ❓,
-     bit 0 ❓.
+     0x10 not drawn and 0x20 not solid (set only by scripts); bit 23 outlines the triangle in its
+     colour along the edges bits 20 (v0–v1), 21 (v1–v2) and 22 (v2–v0) pick (see "Special
+     materials"); bit 0 ❓.
 4. `u32 count`, then vertices `f32 x, y, z` in world coordinates.
 5. `u32` ❓, then BSP leaf data ❓.
+
+## Special materials ✅
+
+How the original draws palette "colours" ≥ 256 (`MDKD3D.EXE`, and `MDK95.EXE` for the software
+renderer).
+
+### Where the value is tested
+
+No special case in the scene code: arena triangles (BSP walk 0x40b9fc → 0x40b7f0) and model
+triangles (`model_draw_parts` 0x40dca0, depth-sorted; also 0x406e24) all call `model_draw_triangle` (0x40e770) with the
+raw s16 material. The value is only interpreted by the rasterizer back end ✅:
+
+- D3D: `d3d_set_material` (0x471290, unnamed in Ghidra) called by every submit function
+  (`d3d_submit_triangle` 0x471954, polygon 0x471ea4, gouraud 0x471c20/0x4721b0, line 0x472420).
+- Software (`MDK95.EXE`): dispatch at 0x40c93f.
+
+```
+m = triangle material (s16, negative = palette colour / special)
+software 0x40c93f                       D3D 0x471290 / submit functions
+m >= 0          texture                 texture (material table 0x57ec10[m]+0x34)
+-255..-1        flat palette[-m]        flat palette[-m & 0xff]
+-1010..-990     mirror 0x47a770(m+1000) mirror: sky texture, screen-space UV
+-1027..-1024    glass LUT fill 0x412970 glass: untextured, vertex ARGB from DTI, alpha blend
+-1028 RIPPLE    0x46e940 (row shift)    NOT DRAWN (every submit fn: if m == -0x404 return)
+m < -1028       LUT (-1029-m) (effects) colour table entry (-1029-m) (effects, not level data)
+other (-256, -257, -989..-257, -1023..-1011): flat palette[(-m) & 0xff]
+```
+
+### NONE (256) and PEN_ENV (257) ✅
+
+- No special code in either renderer. As a negative value they fall through to the palette path:
+  `NONE` → palette 0 (forced black by the DTI loader), `PEN_ENV` → palette 1 (white).
+- Data: no triangle anywhere stores −256 or −257. `NONE` only appears **by name** (index into the
+  name list) on a few arena/corridor triangles (HMO_1/2/3/9, OLYM_5/6, GUNT_2/3/7, CGUNT_3/6), all
+  with triangle flags = 3. `PEN_ENV` is only listed in XBSHARK's material names (OLYM_10) and in
+  the level 5/6 MTI, never referenced by a triangle.
+- A named palette material has no texture: D3D draws it with palette[1] (0x471290 `m >= 0`,
+  texture null), software fills colour 0xFF after a debug print (0x40c8e2). So `NONE` triangles
+  are not "invisible" in the engine ❓; they're probably never seen (flags 3 ❓). Port: keep skipping.
+
+### Mirrors (990–1010) ✅
+
+Names: `MIRRLOW` 990, `MIRRMED` 1000, `MIRRHIGH` 1010 (levels 3/4/7); `PEN_990/995/1000/1005/1010`
+(levels 5/6/8). Any value in 990–1010 is a mirror (XBSHARK uses 995–1009).
+
+Not a real reflection: the triangle is filled with the **sky panorama**, mapped in screen space
+(same columns as the sky behind it), shifted vertically by the material value. Opaque, no blend.
+
+Mirror sky image: the second panorama of the DTI if present (levels 5, 6: DTI block 0 field 11 > 0,
+pixels at `sky + (wrap+4)*height`), else the normal one. D3D: `sky_setup` 0x474694 uploads it as
+texture 0x583bf8 (handle at 0x583c2c); the visible sky is blitted from the **first** panorama
+(0x475860 builds the blit surfaces from `g_sky_pixels`). Software: 0x47a770 picks the same
+second-image offset (0x54ec98/0x54ec94).
+
+```
+k        = value - 1000                     // -10..10  (software arg m+1000, negated sign)
+K        = 360 + 8*(1000 - value)           // 990 → 440, 1000 → 360, 1010 → 280
+sky_x    = (yaw*5 + sky_offset) % wrap - view_w/2     // 0x5991f8, sky_draw 0x475b4c
+sky_y    = round(f * cam_fwd_z)                       // 0x599208 = [0x5991e4]*[0x5739a8] ❓ meaning
+column   = sky_x + screen_x                            // both renderers
+row D3D  = K - sky_y + screen_y      (0x471908: v = (m*8+0x20a8 - sky_y + trunc(y)) * tex.vscale)
+row SW   = K - sky_y - screen_y      (0x47a770: row decremented per scanline → flipped image)
+SW only: rows outside 0..height-1 are filled with the (second) sky's top/bottom colour.
+D3D: UV wraps (no clamp state set).
+```
+
+- D3D state: texture on, TEXTUREMAPBLEND MODULATE, vertex colour 0xFFFFFFFF, no alpha (unless the
+  texture is colour-keyed), flat shade. `rhw` = 1 (no perspective; UVs are already screen space).
+- LOW/MED/HIGH only change `K`, i.e. which band of the sky is reflected (40 px per 5 units).
+  No reflectivity/alpha difference.
+- The software image is vertically flipped (a mirror), the D3D one isn't ❓ (unless the texture
+  upload flips it; 0x474978 not read).
+
+Port: screen-space shader on the sky texture:
+`uv = vec2((sky_x + FRAGCOORD.x) / wrap, (K - sky_y ∓ FRAGCOORD.y) / height)` (in 640×480-ish
+original pixels; scale by viewport / original view size).
+
+### Glass (1024–1027) ✅
+
+Names `GLASS1`–`GLASS4` or `PEN_111`–`PEN_114` (= 1024–1027).
+
+- Colour + alpha per level from the DTI, block 0 after the sky fields (int[13..28]):
+  4 × `{R, G, B, A}` (A 0–255). `level_load` (0x41b0c0) copies them to table 0x5744d8
+  (bytes B, G, R, A). Values:
+
+  | Level | GLASS1 | GLASS2 | GLASS3 | GLASS4 |
+  | --- | --- | --- | --- | --- |
+  | 3 | 96,255,255 a64 | 48,255,255 a48 | 48,255,192 a32 | 0,128,32 a240 |
+  | 4 | 96,255,255 a64 | 48,255,255 a48 | 48,255,192 a32 | 255,255,0 a160 |
+  | 5 | 180,80,40 a128 | 230,180,140 a128 | 0,0,5 a128 | 80,40,20 a128 |
+  | 6 | 220,220,160 a80 | 180,180,140 a80 | 120,50,10 a110 | 180,240,240 a70 |
+  | 7 | 255,0,0 a32 | 255,0,0 a48 | 0,0,0 a128 | 255,255,128 a72 |
+  | 8 | 100,250,255 a110 | 255,200,150 a64 | 250,150,250 a128 | 255,255,255 a128 |
+
+- D3D (0x471290): no texture, vertex colour `A<<24 | RGB` (RGB + flash `0x574242*16`, clamped,
+  0x470694), flags `2 | (0x49230c)`: ALPHABLENDENABLE = 1 with global SRCBLEND = SRCALPHA,
+  DESTBLEND = INVSRCALPHA (set once in 0x470dc0). So `out = A/255 * rgb + (1 - A/255) * dst`.
+  Cards without alpha blending (0x492304 & 0x10): STIPPLEDALPHA + STIPPLEENABLE and RGB halved.
+- Software: per glass a 256-byte LUT (0x4081a4: `pal[i]*(256-A) + rgb*A >> 8`, nearest palette
+  entry), rebuilt on arena change (`arena_activate` 0x4194e4, 0x5738e4 + i*0x100 in D3D exe; 0x540b20 in MDK95);
+  fill = `dst = LUT[dst]`. Same result.
+- Same alpha for both faces; global CULLMODE = NONE (every triangle double-sided in D3D) ✅.
+- `FUN_00433b50` rewrites the table (alphas 0x5a/0x55/0x50/0x3c/0x28/0x0f over 6 tables) for some
+  special scene ❓.
+
+#### Edge outlines (triangle flags bits 20–23) ✅
+
+0x40b7f0, per arena triangle: if flag bit 23 is set, draw lines (0x40f698 → D3D line 0x472420)
+along edges selected by bit 20 (v0–v1), bit 21 (v1–v2), bit 22 (v0–v2). Line colour = the
+triangle's material: palette colour if −255..−1, else the material itself (glass → the glass
+ARGB, alpha blended, gouraud). Bit 23 is set on ~all glass triangles, so glass panes get
+translucent coloured frames. (formats.md currently calls bits 20–22 a light level ❓ — wrong.)
+
+### RIPPLE (1028)
+
+- D3D: never drawn ✅ (`if (m == -0x404) return;` in all submit functions).
+- Software 0x46e940 ✅: screen-space refraction of what's already drawn behind (no z-buffer,
+  back-to-front order). For each scanline `y` of the triangle span `[xl, xr)`:
+
+  ```
+  off = table[(frame + y) & 1023]               // signed byte, pixels
+  for x in xl..xr: fb[y][x] = fb[y][min(x + off, 599)]   // in place, 600-byte rows
+  table[i] = round(4 * sin(i*360/256 °) * sin(i*360/64 °))   // built at 0x46da0a, i < 1384
+  frame = 0x5414d8, +1 per rendered frame (frame-rate dependent)
+  ```
+
+  No tint, no texture: invisible water surface that wobbles the background horizontally (±4 px).
+- Used only by the corridor `CHMO_8` (level 3, 8 triangles). Listed in MTIs of levels 3, 4, 7.
+
+### Per-frame state and ordering ✅
+
+- D3D init (0x470dc0): ZENABLE = 0, ZWRITEENABLE = 0, CULLMODE = NONE, SRCBLEND = SRCALPHA,
+  DESTBLEND = INVSRCALPHA, SHADEMODE = FLAT, TEXTUREPERSPECTIVE = 1, FOG off.
+  State bits cached in 0x4922d4: 1 texture, 2 alpha blend, 8 gouraud, 0x10 MODULATEALPHA.
+- No z-buffer: arena triangles come out back-to-front from the BSP walk, objects are spliced into
+  BSP leaves, model triangles are depth-sorted (qsort 0x479e26). So glass needs no extra sorting.
+- No reflection pass, no stencil. Only per-frame inputs: sky scroll `sky_x`/`sky_y` (sky_draw),
+  frame counter for the ripple.
+
+### Usage (triangle scan of LEVELnO.MTO arenas, models and LEVELnO.SNI corridors) ✅
+
+- Glass: everywhere. Arenas: HMO_2,3,5,7,8,9,10; MEAT_1,3,5,6; MUSE_1–5; OLYM_1–5,7–10;
+  DANT_1–3,5–10; GUNT_1–8. Corridors: CHMO_4,8,9; CMEAT_3; COLYM_4,8; CGUNT_1,3–7,9.
+  Models: XTGUN/XTGUND, XW3/XW3D, XCBOSS, X_STRIKD, XT/XTD, X_BOTTLE, X_GLASS, X3_LDOOR, XBSHARK,
+  XGDR, BEAMS, XBSHIP, XCARGO/XCARGOD, XFORK, XMINCAR.
+- Mirrors: arenas HMO_9 (990), MUSE_3 (990/1000/1005), OLYM_5 (995), OLYM_6 (990/1000),
+  OLYM_7 (990–1010), GUNT_5 (995), GUNT_8 (995); corridor CHMO_9 (1000); model XBSHARK (995–1009).
+- RIPPLE: CHMO_8 only. NONE: by name only (see above). PEN_ENV: unused.
+
+### In the port
+
+`MDKSpecialMaterials` (from the DTI, given to the level's `MaterialResolver`s): glass is unshaded,
+the DTI colour with its alpha, double-sided; mirrors use `mirror.gdshader`, the sky's mapping by
+view direction on the mirror panorama (`MDKDti.mirror_sky`) with the rows shifted by
+`8 × (1000 − value)` (`MIRRMED` taken to show the sky as behind it ❓, the original's `sky_y` and
+row base not matched exactly); `RIPPLE`, `NONE` and `PEN_ENV` aren't drawn. Outlined edges are line
+surfaces in the triangle's material (`MDKMeshBuilder._add_outlines`, untextured triangles only).
+The sky is now the first panorama on levels 5 and 6 (it was the second ❓ to check against the
+game). Elsewhere (the fall, the stream, the statistics, the model viewer) placeholders remain.
 
 ## Texture archive (MAT/MTI) ✅
 
@@ -200,11 +360,13 @@ An arena's `HMO_n.MAT` or a level's `LEVELnS.MTI` (offsets relative to the inter
 
   | Value | Names | Meaning |
   | --- | --- | --- |
-  | 256 | `NONE` | Invisible |
-  | 257 | `PEN_ENV` | ❓ |
-  | 990–1010 | `MIRRLOW`, `MIRRMED`, `MIRRHIGH` | Mirror |
-  | 1024–1027 | `GLASS1`–`GLASS4` | Glass |
-  | 1028 | `RIPPLE` | Water |
+  | 256 | `NONE` | Not drawn (only by name, on hidden triangles) |
+  | 257 | `PEN_ENV` | Unused |
+  | 990–1010 | `MIRRLOW`, `MIRRMED`, `MIRRHIGH` | Mirror: the sky panorama, shifted |
+  | 1024–1027 | `GLASS1`–`GLASS4` | Glass: the level's colour and alpha |
+  | 1028 | `RIPPLE` | Water: rows of the background shifted (software only) |
+
+  See "Special materials" below.
 
 - High 16 bits of `kind` set (0x10000, 0x10001, 0x20000): animated texture ✅:
   `u32 frame count, u16 width, u16 height`, then the frames (`width × height` indices each).
