@@ -51,6 +51,12 @@ const CHUTE_FALL_SPEED := -8.0
 const CHUTE_BRAKE := 256.0
 ## `CHUTEON` starts once the chute's opening frames have played.
 const CHUTE_OPEN_FRAMES := 4
+## The chute is painted in Kurt's frames (`damp_animate` 0x4646a4): `K_CHUTE` 0–4 open it, then
+## `K_CHUTEC` sways back and forth (0 → 11 → 1, 22 ticks); `K_CHUTE` 7 closes it.
+const CHUTE_OPENING := "K_CHUTE"
+const CHUTE_SWAY := "K_CHUTEC"
+const CHUTE_OPENED_FRAME := 5
+const CHUTE_CLOSED_FRAME := 7
 ## Out of an updraft Kurt rises at most this fast.
 const UPDRAFT_EXIT_SPEED := 40.0
 
@@ -168,7 +174,7 @@ const STATE_ANIMATIONS := {
 	State.JUMP: ["K_JUMP", false],
 	State.RUN_JUMP: ["K_RJMP", false],
 	State.FALL: ["K_FALL", true],
-	State.CHUTE: ["K_FLOATC", true],
+	State.CHUTE: ["K_CHUTE", false],
 	State.LAND: ["K_LAND", false],
 	State.SHOT: ["K_SHOT", true],
 	State.RUN_FIRE: ["K_RUNFIR", true],
@@ -1129,6 +1135,11 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 	if not is_on_floor():
 		if chute_open:
 			_set_state(State.CHUTE)
+		elif state == State.CHUTE:
+			# Closed in the air: its closing frame, then the fall.
+			sprite.show_frame(sprites.get_animation(CHUTE_OPENING), CHUTE_CLOSED_FRAME)
+			_set_state(State.FALL)
+			return
 		elif velocity.y > 0.0 and state not in [State.JUMP, State.RUN_JUMP, State.FALL]:
 			_set_state(State.RUN_JUMP if absf(forward_speed) > 1.0 else State.JUMP)
 		elif velocity.y < FALL_START_SPEED and (state not in [State.JUMP, State.RUN_JUMP] or animation_done):
@@ -1174,12 +1185,28 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 		State.TURN:
 			# The turning animation covers 45° of rotation.
 			animation_frame = rad_to_deg(yaw) / 45.0 * animation.frame_count
+		State.CHUTE:
+			animation_frame += TICKS * delta
+			_show_chute()
+			return
 		_:
 			animation_frame += TICKS * delta
 	var frame := int(floor(animation_frame))
 	if not STATE_ANIMATIONS[state][1]:
 		frame = mini(frame, animation.frame_count - 1)
 	sprite.show_frame(animation, frame)
+
+
+## The chute opening, then swaying (see `CHUTE_SWAY`).
+func _show_chute() -> void:
+	var frame := int(floor(animation_frame))
+	if frame < CHUTE_OPENED_FRAME:
+		sprite.show_frame(sprites.get_animation(CHUTE_OPENING), frame)
+		return
+	var sway := sprites.get_animation(CHUTE_SWAY)
+	var last := sway.frame_count - 1
+	var k := (frame - CHUTE_OPENED_FRAME) % (last * 2)
+	sprite.show_frame(sway, k if k <= last else last * 2 - k)
 
 
 ## A looping copy of a sound.

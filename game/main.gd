@@ -9,6 +9,7 @@
 ##   --delay=seconds           Wait this long before walking.
 ##   --walk=seconds            Hold "move forward" for this long (for automated tests).
 ##   --fire                    Hold "fire" (for automated tests).
+##   --jump                    Hold "jump" after the delay (for automated tests: the chute).
 ##   --health=N                Start with this much health (for tests).
 ##   --give=SW_A,SW_B          Start with these pickups (for tests).
 ##   --use                     Press "use item" after the delay (for tests).
@@ -213,6 +214,8 @@ func _ready() -> void:
 		await _board_bomber()
 		if args.bomber == "drop":
 			await _drop_bomb()
+	if args.has("jump"):
+		Input.action_press(&"jump")
 	if args.has("use"):
 		Input.action_press(&"item_use")
 		await get_tree().create_timer(0.1).timeout
@@ -429,4 +432,5 @@ func _profile(seconds: float) -> void:
 			items.push_back("%s×%d" % [KurtInventory.Item.keys()[slot.item], slot.count])
 		print("Kurt at %s health %d, items %s (selected %d), ammo %s, super chain gun %d" % [MDKScriptRuntime.to_mdk(kurt.global_position).round(), kurt.health, items,
 				kurt.inventory.selected, kurt.inventory.ammo, kurt.inventory.super_chain_gun])
+		print("Kurt shows %s" % (kurt.sprite.animation.name if kurt.sprite.animation else "-"))
 	get_tree().quit()

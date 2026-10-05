@@ -67,7 +67,9 @@ Speeds per tick (× 30 for per second):
 - Jump: vertical speed 40 u/s (peak ≈ 12 u), when on the ground and the key was released since the
   last jump. During the first 6 ticks, releasing the key subtracts the remaining ticks × 3.333 u/s.
 - Falling faster than 16 u/s starts the fall (700), or the chute (701) if the jump key is held.
-- Chute: gravity 21.33 u/s², falling speed braked (256 u/s²) to 8 u/s.
+- Chute: gravity 21.33 u/s², falling speed braked (256 u/s²) to 8 u/s. The canopy is painted in
+  Kurt's frames (below, "The chute's frames"); the port: `Kurt._show_chute`, test
+  `tests/chute_test.sh` (`--jump` holds the key).
 - Landing faster than 100 u/s is a hard landing (probably damage *(inferred)*).
 - The floor is found by the downward collision sweep (no separate height query). Moving platforms
   are found by a ray from z + 3 to z − 3 (`damp_platform_floor`).
@@ -91,6 +93,89 @@ Speeds per tick (× 30 for per second):
 
 The frame advances by `rate` frames per tick, with u = forward speed (u/tick) × 1.5:
 rate = 0.75u + 0.25 up to u = 1, then 0.25u + 0.75. It plays backwards when backing up.
+
+### The chute's frames (`damp_animate` 0x4646a4)
+
+#### Summary
+
+✅ The canopy isn't geometry. No lines or polygons are drawn: it's painted into Kurt's sprite
+frames. `K_CHUTE` (8 frames: open, then close) and `K_CHUTEC` (12 frames: the loop) in
+`TRAVERSE/TRAVSPRT.BNI` show Kurt hanging under a ribbon chute. It has four or five long elliptical
+loops ("bands") fanning up from his hands. `damp_animate` (0x4646a4) picks these frames for state
+701, and `damp_sprite_draw` blits them like any other Kurt frame.
+
+✅ The port's bug: `kurt.gd` `STATE_ANIMATIONS[State.CHUTE] = ["K_FLOATC", true]`. `K_FLOATC` is
+the end-of-level float (state 1001, after `K_TAKEOF`) and has no canopy. The fix is to play
+`K_CHUTE`/`K_CHUTEC` as described below.
+
+#### Frames (decoded from TRAVSPRT.BNI) ✅
+
+| Anim | Frames | Size (px) | Hotspot | Content |
+| --- | --- | --- | --- | --- |
+| `K_CHUTE` f0–f2 | 3 | 68×120 → 104×190 | (13,30) → (39,49) | Pack deploying, small loops |
+| `K_CHUTE` f3 | 1 | 244×249 | (111,132) | Loops half open |
+| `K_CHUTE` f4 | 1 | 356×287 | (168,197) | Fully open |
+| `K_CHUTE` f5–f7 | 3 | 252×257 → 72×138 | (118,142) → (20,29) | Closing (loops shrink back) |
+| `K_CHUTEC` f0–f11 | 12 | ≈339–347 × 288–295 | (185,208) → (155,202) | Open canopy swaying left → right |
+| `K_FLOATC` (current port) | 17 | ≈95–124 × 113–139 | | No canopy |
+
+- Colours: Kurt's usual range, indices 16–47. The canopy bands are mostly 36, with 33–37 for the
+  shading and 16 (black) for the outlines. Nothing new is needed in the palette.
+- Placement: same as every Kurt frame. The top-left is at (x − hx, y − 101 − hy) from his projected
+  feet, at 1 pixel per pixel (gameplay.md "Kurt's sprite"). No scaling, rotation or tinting. Turning
+  and speed don't affect it: the sway is only the baked ping-pong.
+
+#### Animation logic (`damp_animate`, state 701) ✅
+
+`f` = `0x573a78` (frame counter), `open` = `0x573a44` (chute flag). One step per tick, 30 ticks/s.
+In a `K_*` table, `T[0]` is the count and `T[1+k]` the offset of frame k.
+
+```
+on entering 701:
+    f = 0; play CHUTEOUT; frame = K_CHUTE[0]
+
+each tick in 701:
+    if f < 4:                                  # opening: K_CHUTE 0..4, 1 frame/tick
+        f = min(f + ticks, 4); frame = K_CHUTE[f]
+    elif not open:                             # jump released or landed: close
+        if CHUTEON playing: stop CHUTEON; play CHUTEIN
+        f += ticks
+        if f >= 7: f = 7; anim_priority(0x573a80) = 0   # lets 700/200 take over
+        frame = K_CHUTE[f]                     # usually jumps straight to f7 (see below)
+    else:                                      # open loop: K_CHUTEC ping-pong
+        f += ticks
+        if f >= 2*12 + 2: f = 4                # 26 -> wrap
+        k = f - 4         if f < 12 + 4        # f 4..15  -> frames 0..11
+          = 26 - f        otherwise            # f 16..25 -> frames 10..1
+        frame = K_CHUTEC[k]
+        play_once_looping(CHUTEON)
+        if firing and (0x573aa4 & 1):          # muzzle flash
+            flash = K_MUZZF[random], offset (20 + rnd(0..4), rnd(0..4))
+```
+
+- One sway cycle is 22 ticks (0.73 s): frames 0→11→1, then back to 0.
+- Closing reuses `f`. After the loop `f` is 4–25, so `f` + ticks ≥ 7 almost always. Releasing the
+  key during the loop shows `K_CHUTE` f7 (the packed chute) for one frame, then falls through to
+  700. ❓ Frames f5–f6 are only seen when closing right after opening (f = 4 or 5).
+- `open` is recomputed every frame by `damp_vertical` (0x4694bc) and `damp_gravity` (0x469efc). It
+  is 1 while airborne (`0x573a48 ≠ 0`) with the jump key held (`0x50152c`). Releasing the key
+  requests state 700 instead. ❓ Landing goes straight to 200 (`K_LAND`), with no closing frames
+  (the landing request has a higher priority; not traced).
+
+#### Other effects of the open chute ✅
+
+- Draw list (`arena_build_drawlist` 0x4185f0): while `open`, Kurt's bounding box top (`0x5739f4[5]`, max z) is
+  raised by 8.0 (`0x49415c`), so the tall sprite isn't culled or sorted as if it were only his body.
+- The vertical physics (gravity 21.33, braked to 8 u/s) and the input tweak in `input_read_axes` (0x408334,
+  `0x573a44` changes an axis scale) are already documented in gameplay.md, or not chute-visual. ❓ (input tweak not analysed)
+
+#### Porting notes
+
+- Replace `State.CHUTE: ["K_FLOATC", true]` with logic for the two animations, following the
+  pseudo-code above (it can't be a single looping animation).
+- The frames reach about 300 px above the anchor. The quad's `custom_aabb` (±50 u) is large
+  enough; check the sprite shader doesn't clip frames larger than the body frames.
+- Keep `K_FLOATC` for `end_level.gd` (state 1001).
 
 ## Collision (`damp_collide_move`, `bsp_sweep_box`)
 
