@@ -16,8 +16,8 @@ files and executable (`MDKD3D.EXE`, the Direct3D version), and it aims to play l
 
 **Status: work in progress.** The six levels load and run with the original scripts, aliens,
 weapons, items, rides and sniper mode, with the falls and streams between them, the briefings,
-statistics and the end videos. It's being played through and its bugs fixed, so there's no release
-yet. See [the roadmap](docs/roadmap.md).
+statistics and the end videos. It's being played through and its bugs fixed; there's an
+[alpha test build](https://github.com/nemo22/mdk-godot/releases). See [the roadmap](docs/roadmap.md).
 
 ## Progress
 
