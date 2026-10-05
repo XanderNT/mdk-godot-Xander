@@ -12,12 +12,21 @@
 extends Control
 
 const MENU_VIDEO := "MISC/FLIC/MDK12.FLC"
+## "Really Quit?" (0x403cf8): its title in row 3 (y 139), Yes and No below; Y, J, O, S or T say
+## yes in the game's languages, N no.
+const QUIT_ROW := 3
+const YES_KEYS := [KEY_Y, KEY_J, KEY_O, KEY_S, KEY_T]
+const NO_KEY := KEY_N
+
+## The page shown, for Esc.
+enum Page { MAIN, QUIT, OTHER }
 
 
 var fti: MDKFti
 var level_index := 0
 var _video := MDKVideo.new()
 var _slideshow: MenuSlideshow
+var _page := Page.MAIN
 
 @onready var background: TextureRect = $Background
 @onready var items: MenuItems = $Items
@@ -76,6 +85,7 @@ func _ready() -> void:
 	music.play()
 	click.stream = MDKSound.load_wav(fti.get_bytes("SND_PUSH"))
 	items.click = click
+	items.setup(fti)
 
 	level_index = maxi(GameState.index_of(GameState.level), 0)
 	_show_main()
@@ -122,8 +132,33 @@ func _input(event: InputEvent) -> void:
 		_slideshow.reset()
 
 
+## Esc on the main page asks "Really Quit?", and there means no.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo or not items.visible:
+		return
+	if _page == Page.MAIN and event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		_show_quit()
+	elif _page == Page.QUIT and event.keycode in YES_KEYS:
+		get_tree().quit()
+	elif _page == Page.QUIT and event.keycode in [NO_KEY, KEY_ESCAPE]:
+		get_viewport().set_input_as_handled()
+		_show_main()
+
+
+func _show_quit() -> void:
+	items.clear()
+	_page = Page.QUIT
+	items.first_row = QUIT_ROW
+	items.add_title(fti.get_text("ABORT1", "Really Quit?"))
+	items.add_item(fti.get_text("ABORT2", "Yes"), get_tree().quit)
+	items.add_item(fti.get_text("ABORT3", "No"), _show_main)
+	items.get_child(1).grab_focus()
+
+
 func _show_main() -> void:
 	items.clear()
+	_page = Page.MAIN
 	# "Continue" plays the level Kurt last died in (`LASTGAME`).
 	if GameState.has_last_game():
 		items.add_item(fti.get_text("OPT0", "Continue"), _load.bind(GameState.LAST_GAME))
@@ -132,6 +167,8 @@ func _show_main() -> void:
 	items.add_item(fti.get_text("OPT2", "Saved Game"), _show_saves)
 	items.add_item(fti.get_text("OPT3", "Options"), _show_options)
 	items.add_item(fti.get_text("OPT4", "Quit"), get_tree().quit)
+	# The main page is a column at the view's left edge (0x4265c0).
+	items.align = MenuItems.Align.LEFT
 	_update_level_text()
 	items.get_child(0).grab_focus()
 
@@ -139,10 +176,10 @@ func _show_main() -> void:
 ## The saved games (`SVOPT1`, or `SVOPT3` when there are none), with their level.
 func _show_saves() -> void:
 	items.clear()
+	_page = Page.OTHER
 	var names := GameState.list_games()
-	var title := items.add_item(fti.get_text("SVOPT1" if not names.is_empty() else "SVOPT3", "Saved games").split("
-")[0], Callable())
-	title.disabled = true
+	items.add_title(fti.get_text("SVOPT1" if not names.is_empty() else "SVOPT3", "Saved games").split("
+")[0])
 	for save_name in names:
 		var data := GameState.read_game(save_name)
 		var text := "%s  (%s)" % [save_name, "Level %d" % (GameState.index_of(int(data.level)) + 1) if not data.is_empty() else fti.get_text("SVBAD", "Invalid")]
@@ -166,6 +203,7 @@ func _load(save_name: String) -> void:
 
 ## `MAINSONG` stops while the options play `OPTSONG` (0x42bb6c, 0x42bbc0).
 func _show_options() -> void:
+	_page = Page.OTHER
 	music.stop()
 	items.show_options(func() -> void:
 		music.play()

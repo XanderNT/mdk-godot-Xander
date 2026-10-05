@@ -18,15 +18,11 @@ func _ready() -> void:
 	dim.color = Color(0, 0, 0, 0.6)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
-	_items.set_anchors_preset(Control.PRESET_CENTER)
-	_items.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_items.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_items.alignment = BoxContainer.ALIGNMENT_CENTER
-	_items.add_theme_constant_override(&"separation", 0)
 	add_child(_items)
 	var fti := MDKFti.load_file(MDKData.path("MISC/MDKFONT.FTI"))
 	if fti:
 		_click.stream = MDKSound.load_wav(fti.get_bytes("SND_PUSH"))
+		_items.setup(fti)
 	_click.volume_db = -6.0
 	add_child(_click)
 	_items.click = _click

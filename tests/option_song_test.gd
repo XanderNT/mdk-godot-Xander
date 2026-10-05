@@ -10,7 +10,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	var items: VBoxContainer = load(MENU_ITEMS).new()
+	var items: Control = load(MENU_ITEMS).new()
 	root.add_child(items)
 	items.show_options(Callable())
 	var song := items.get_child(0, true) as AudioStreamPlayer
