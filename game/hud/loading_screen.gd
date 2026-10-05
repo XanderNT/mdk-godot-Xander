@@ -31,7 +31,7 @@ func setup(level_number: int, fti: MDKFti) -> void:
 		_bar_fill = palette.get_color(3)
 		_bar_frame = palette.get_color(4)
 	_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_canvas.texture_filter = Settings.canvas_filter()
 	_canvas.draw.connect(_draw_screen)
 	add_child(_canvas)
 

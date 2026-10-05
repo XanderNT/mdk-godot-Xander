@@ -8,6 +8,15 @@ const CONNECTION := 6
 ## Triangle flags changed by scripts (`group_set_state`): hidden, and not solid.
 const TRIANGLE_HIDDEN := 0x10
 const TRIANGLE_NOT_SOLID := 0x20
+## The enhanced look's sun (pitch, yaw in degrees), its strength, the light from the sky, how far
+## shadows reach, how much glows and how thick the haze is.
+const SUN_ANGLES := Vector3(-55.0, 35.0, 0.0)
+const SUN_ENERGY := 0.5
+## White light all around, so shaded faces keep about the texture's own brightness.
+const AMBIENT_ENERGY := 0.75
+const SHADOW_DISTANCE := 300.0
+const GLOW_BLOOM := 0.05
+const FOG_DENSITY := 0.0007
 ## Sky modes (`show_sky`).
 const SKY_SHOWN := 0
 const SKY_BLACK := 1
@@ -46,6 +55,8 @@ var arena_pitch := {}
 var arena_groups := {}
 ## The level's glass and mirrors.
 var specials: MDKSpecialMaterials
+## The original or the enhanced look, chosen when the level loads.
+var look := MDKMeshBuilder.Look.ORIGINAL
 var _environment: Environment
 ## The arenas Kurt collides with (all until `set_solid_arenas`).
 var solid_arenas: Array[String] = []
@@ -73,6 +84,7 @@ func load_level(p_number: int) -> void:
 	level_textures = MDKTextureArchive.load_file(MDKData.path(dir + "LEVEL%dS.MTI" % number))
 	cmi = MDKCmi.load_file(MDKData.path(dir + "LEVEL%d.CMI" % number))
 	specials = MDKSpecialMaterials.new(dti)
+	look = MDKMeshBuilder.Look.ENHANCED if Settings.enhanced_graphics else MDKMeshBuilder.Look.ORIGINAL
 	var overlays := MDKSni.load_file(MDKData.path(dir + "LEVEL%dO.SNI" % number))
 	sound_archives = [MDKSni.load_file(MDKData.path("TRAVERSE/TRAVERSE.SNI")),
 			MDKSni.load_file(MDKData.path(dir + "LEVEL%dS.SNI" % number)), overlays]
@@ -109,6 +121,7 @@ func load_level(p_number: int) -> void:
 		archives.append_array(all_archives)
 		var resolver := MDKMeshBuilder.MaterialResolver.new(palette, archives)
 		resolver.specials = specials
+		resolver.look = look
 		_arenas[arena_name] = arena
 		_resolvers[arena_name] = resolver
 		var root := Node3D.new()
@@ -341,6 +354,29 @@ func set_solid_arenas(arena_names: Array[String]) -> void:
 			(group.shape.get_parent() as StaticBody3D).collision_layer = layer
 
 
+## The enhanced look: a sun with shadows, white light all around, ambient occlusion, glow on
+## the brightest parts and a light haze in the colour of the sky's horizon.
+func _enhance(environment: Environment) -> void:
+	var sun := DirectionalLight3D.new()
+	sun.name = "Sun"
+	sun.rotation_degrees = SUN_ANGLES
+	sun.light_energy = SUN_ENERGY
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = SHADOW_DISTANCE
+	add_child(sun)
+
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color.WHITE
+	environment.ambient_light_energy = AMBIENT_ENERGY
+	environment.ssao_enabled = true
+	environment.glow_enabled = true
+	environment.glow_bloom = GLOW_BLOOM
+	environment.fog_enabled = true
+	environment.fog_light_color = dti.palette.get_color(dti.sky_bottom_color)
+	environment.fog_density = FOG_DENSITY
+	environment.fog_sky_affect = 0.0
+
+
 ## How the background is drawn (`0x574304`, sky_draw 0x475b4c): 0 the sky, 1 black, −1 nothing
 ## (what was drawn before stays).
 func show_sky(mode: int) -> void:
@@ -444,6 +480,7 @@ func _setup_sky() -> void:
 	material.set_shader_parameter(&"offset", float(dti.sky_offset))
 	material.set_shader_parameter(&"top_color", dti.sky_top_color)
 	material.set_shader_parameter(&"bottom_color", dti.sky_bottom_color)
+	material.set_shader_parameter(&"filtered", look == MDKMeshBuilder.Look.ENHANCED)
 	var sky := Sky.new()
 	sky.sky_material = material
 	var environment := Environment.new()
@@ -451,6 +488,8 @@ func _setup_sky() -> void:
 	environment.sky = sky
 	environment.background_color = Color.BLACK
 	_environment = environment
+	if look == MDKMeshBuilder.Look.ENHANCED:
+		_enhance(environment)
 	var world_environment := WorldEnvironment.new()
 	world_environment.environment = environment
 	add_child(world_environment)

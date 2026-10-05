@@ -59,6 +59,7 @@ func setup(fti: MDKFti) -> void:
 	_big = MDKFont.load_font(fti, "FONTBIG", palette, SPACE_BIG)
 	_small = MDKFont.load_font(fti, "FONTSML", palette, SPACE_SMALL)
 	_set_cursor(fti, palette)
+	texture_filter = Settings.canvas_filter()
 
 
 ## The original's arrow as the mouse cursor, at the view's scale in the window.
@@ -173,6 +174,8 @@ func show_options(on_back: Callable) -> void:
 			func(_step: int) -> void: Settings.fullscreen = not Settings.fullscreen)
 	add_option(func() -> String: return "Difficulty: %s" % ["Easy", "Normal", "Hard"][Settings.difficulty],
 			func(step: int) -> void: Settings.difficulty = wrapi(Settings.difficulty + step, 0, 3))
+	add_option(func() -> String: return "Graphics: %s" % ("Enhanced" if Settings.enhanced_graphics else "Original"),
+			func(_step: int) -> void: Settings.enhanced_graphics = not Settings.enhanced_graphics)
 	add_option(func() -> String: return "Gore: %s" % _on_off(Settings.gore),
 			func(_step: int) -> void: Settings.gore = not Settings.gore)
 	add_item("Controls", func() -> void: show_controls(show_options.bind(on_back)))

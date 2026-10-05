@@ -35,7 +35,7 @@ var _bomber := BomberOverlay.new()
 
 func setup(p_kurt: Kurt, sprites: MDKBni, palette: MDKPalette, fti: MDKFti) -> void:
 	kurt = p_kurt
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_filter = Settings.canvas_filter()
 	messages.setup(fti, palette)
 	kurt.inventory.picked_up.connect(func(text_name: String) -> void: messages.push(text_name, HUDMessages.FLAG_ZOOM, 2.0))
 	_bar_fill = palette.get_color(3)

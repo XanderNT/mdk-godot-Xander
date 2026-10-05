@@ -905,6 +905,7 @@ func spawn_box(parent: MDKObject, mdk_position: Vector3, size: Vector3, texture_
 	var texture := resolver.find_texture(texture_name)
 	if texture:
 		var sprite := Sprite3D.new()
+		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var image := resolver.palette.make_image(texture.width, texture.height * texture.frame_count, texture.indices, true)
 		sprite.texture = ImageTexture.create_from_image(image)
 		sprite.vframes = texture.frame_count
@@ -1859,6 +1860,7 @@ func get_resolver(arena_name: String) -> MDKMeshBuilder.MaterialResolver:
 			archives.push_front(arena.textures)
 		_resolvers[arena_name] = MDKMeshBuilder.MaterialResolver.new(palette, archives)
 		_resolvers[arena_name].specials = level.specials
+		_resolvers[arena_name].look = level.look
 		# Some models have flat parts seen from both sides (e.g. the petals of iris doors).
 		_resolvers[arena_name].double_sided = true
 	return _resolvers[arena_name]

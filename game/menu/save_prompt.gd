@@ -58,7 +58,7 @@ func open(fti: MDKFti, kind: int, default_name: String, level_state := {}) -> vo
 	_name = default_name.left(NAME_LENGTH)
 	_cursor = _name.length()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_filter = Settings.canvas_filter()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 

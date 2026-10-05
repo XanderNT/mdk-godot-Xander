@@ -111,7 +111,7 @@ func _ready() -> void:
 	add_child(_teletype)
 	_setup_heads()
 	_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_canvas.texture_filter = Settings.canvas_filter()
 	_canvas.draw.connect(_draw_screen)
 	add_child(_canvas)
 

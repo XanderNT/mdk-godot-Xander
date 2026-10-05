@@ -4,6 +4,11 @@ extends RefCounted
 
 const PALETTE_SHADER := preload("res://mdk/shaders/palette.gdshader")
 const PALETTE_DOUBLE_SIDED_SHADER := preload("res://mdk/shaders/palette_double_sided.gdshader")
+const PALETTE_LIT_SHADER := preload("res://mdk/shaders/palette_lit.gdshader")
+const PALETTE_LIT_DOUBLE_SIDED_SHADER := preload("res://mdk/shaders/palette_lit_double_sided.gdshader")
+
+## The original look (unlit, nearest texels) or the enhanced one (lit, filtered).
+enum Look { ORIGINAL, ENHANCED }
 
 ## Special material values (palette "colors" ≥ 256, named in the level's MTI archive).
 const SPECIAL_NONE := 256  # Invisible.
@@ -31,6 +36,7 @@ class MaterialResolver:
 	var double_sided := false
 	## The level's glass and mirrors; without them special values get placeholder colours.
 	var specials: MDKSpecialMaterials
+	var look := Look.ORIGINAL
 
 	var _texture_materials := {}
 	var _color_materials := {}
@@ -64,7 +70,7 @@ class MaterialResolver:
 		var texture := find_texture(material_name)
 		if texture:
 			if not _texture_materials.has(texture):
-				_texture_materials[texture] = MDKMeshBuilder.make_palette_material(texture, palette, double_sided)
+				_texture_materials[texture] = MDKMeshBuilder.make_palette_material(texture, palette, double_sided, look)
 			return _texture_materials[texture]
 		for archive in archives:
 			if archive.colors.has(material_name):
@@ -79,7 +85,7 @@ class MaterialResolver:
 	func _get_color_material(index: int) -> Material:
 		if not _color_materials.has(index):
 			if index < 256:
-				_color_materials[index] = MDKMeshBuilder.make_color_material(palette.get_color(index), double_sided)
+				_color_materials[index] = MDKMeshBuilder.make_color_material(palette.get_color(index), double_sided, look)
 			elif specials:
 				_color_materials[index] = specials.get_material(index)
 			else:
@@ -127,6 +133,7 @@ static func build_arena_mesh(arena: MDKArena, resolver: MaterialResolver, triang
 		var arrays := []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = positions
+		arrays[Mesh.ARRAY_NORMAL] = flat_normals(positions)
 		arrays[Mesh.ARRAY_TEX_UV] = uvs
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
@@ -193,6 +200,7 @@ static func build_model_mesh(model: MDKModel, pose: Array, resolver: MaterialRes
 		var arrays := []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = positions
+		arrays[Mesh.ARRAY_NORMAL] = flat_normals(positions)
 		arrays[Mesh.ARRAY_TEX_UV] = uvs
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
@@ -214,9 +222,25 @@ static func build_arena_collision(arena: MDKArena, triangles := PackedInt32Array
 	return shape
 
 
-static func make_palette_material(texture: MDKTexture, palette: MDKPalette, double_sided := false) -> ShaderMaterial:
+## A triangle's normal for each of its corners (the original has none: only the enhanced look is
+## lit). Godot's front faces wind clockwise.
+static func flat_normals(positions: PackedVector3Array) -> PackedVector3Array:
+	var normals := PackedVector3Array()
+	normals.resize(positions.size())
+	for i in range(0, positions.size() - 2, 3):
+		var normal := (positions[i + 2] - positions[i]).cross(positions[i + 1] - positions[i]).normalized()
+		normals[i] = normal
+		normals[i + 1] = normal
+		normals[i + 2] = normal
+	return normals
+
+
+static func make_palette_material(texture: MDKTexture, palette: MDKPalette, double_sided := false, look := Look.ORIGINAL) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	material.shader = PALETTE_DOUBLE_SIDED_SHADER if double_sided else PALETTE_SHADER
+	if look == Look.ENHANCED:
+		material.shader = PALETTE_LIT_DOUBLE_SIDED_SHADER if double_sided else PALETTE_LIT_SHADER
+	else:
+		material.shader = PALETTE_DOUBLE_SIDED_SHADER if double_sided else PALETTE_SHADER
 	material.set_shader_parameter(&"index_texture", texture.get_index_texture())
 	material.set_shader_parameter(&"palette", palette.get_texture())
 	material.set_shader_parameter(&"frame_count", texture.frame_count)
@@ -247,9 +271,10 @@ static func make_special_material(value: int) -> Material:
 	return material
 
 
-static func make_color_material(color: Color, double_sided := false) -> StandardMaterial3D:
+static func make_color_material(color: Color, double_sided := false, look := Look.ORIGINAL) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL if look == Look.ENHANCED else BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.roughness = 1.0
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED if double_sided else BaseMaterial3D.CULL_BACK
 	material.albedo_color = color
 	return material

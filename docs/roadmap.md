@@ -83,12 +83,23 @@
 
 ## Enhanced graphics mode
 
-A toggle between the original look and an enhanced one:
+A toggle between the original look and an enhanced one ("Graphics" in the options, from the next
+level; `--enhanced` / `--original` for tests).
 
-- **Texture filtering**: bilinear/trilinear filtering with mipmaps and anisotropic filtering
-  (textures are converted from palette indices to RGBA for this; the original mode keeps
-  nearest-neighbor palette lookup).
-- **Dynamic lighting**: per-vertex normals, lit materials, a sun light per level (direction and
-  color matched to the sky), shadows, lights for muzzle flashes, explosions and effects.
-- Post-processing: ambient occlusion, glow, fog matched to the sky colors, higher view distance.
-- Proper effects for special materials (reflective mirrors, glass, animated water).
+Done (first pass):
+
+- **Texture filtering**: bilinear by hand in the palette shader (`palette_filtered.gdshaderinc`:
+  four texels through the palette, then blended; index 0 stays transparent, animated textures
+  keep to their frame). No mipmaps yet.
+- **Lighting**: flat normals on arena and model meshes (`MDKMeshBuilder.flat_normals`), lit
+  palette and colour materials (`MDKMeshBuilder.Look`), one sun with shadows (`Level._enhance`,
+  the same direction in every level), white ambient light so shaded faces keep about the
+  texture's brightness.
+- **Post-processing**: SSAO, a little glow, a light haze in the colour of the sky's horizon.
+- **Sky, sprites and screens**: the sky is filtered the same way (`sky.gdshader` `filtered`),
+  Kurt's and the muzzle's sprites too (alpha-scissored edges, `sprite.gdshader`), and the HUD,
+  menus and other 2D screens sample their images linearly (`Settings.canvas_filter`). Flat
+  sprites throw no shadows (`tests/sprite_shadow_test.gd`).
+
+Still to do: mipmaps or anisotropic filtering, a sun per level matched to its sky, lights for
+muzzle flashes, explosions and effects, smooth normals where faces meet at small angles.

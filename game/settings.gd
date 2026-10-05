@@ -27,6 +27,9 @@ var difficulty := 1
 ## line switches `-bloodyes` / `-nobloodno` (here `--bloodyes` / `--nobloodno`, not saved) and the
 ## cheat `TOOSCARYFORME` set it.
 var gore := true
+## The enhanced look (`MDKMeshBuilder.Look.ENHANCED`: lit, filtered textures, sun and shadows,
+## ambient occlusion, glow, fog), from the next level on.
+var enhanced_graphics := false
 ## The game's actions in the order the controls screen lists them, with their names.
 const ACTIONS := {
 	&"move_forward": "Forward", &"move_back": "Back", &"turn_left": "Turn left", &"turn_right": "Turn right",
@@ -62,12 +65,23 @@ func _load() -> void:
 	fullscreen = config.get_value("video", "fullscreen", fullscreen)
 	difficulty = config.get_value("game", "difficulty", difficulty)
 	gore = config.get_value("game", "gore", gore)
+	enhanced_graphics = config.get_value("display", "enhanced_graphics", enhanced_graphics)
 	var args := Args.get_all()
 	if args.has("bloodyes"):
 		gore = true
 	if args.has("nobloodno"):
 		gore = false
+	# Tests: `--enhanced` / `--original` (not saved).
+	if args.has("enhanced"):
+		enhanced_graphics = true
+	if args.has("original"):
+		enhanced_graphics = false
 	bindings = config.get_value("controls", "bindings", {})
+
+
+## How 2D screens (HUD, menus) sample their images: smooth in the enhanced look, else sharp pixels.
+func canvas_filter() -> CanvasItem.TextureFilter:
+	return CanvasItem.TEXTURE_FILTER_LINEAR if enhanced_graphics else CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func save() -> void:
@@ -81,6 +95,7 @@ func save() -> void:
 	config.set_value("video", "fullscreen", fullscreen)
 	config.set_value("game", "difficulty", difficulty)
 	config.set_value("game", "gore", gore)
+	config.set_value("display", "enhanced_graphics", enhanced_graphics)
 	config.set_value("controls", "bindings", bindings)
 	config.save(PATH)
 
