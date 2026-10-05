@@ -52,6 +52,11 @@ const END_MOVIE := "res://game/video/end_movie.tscn"
 const SNAPSHOT_KEY := KEY_F2
 ## The name prompt is drawn over the HUD and the pause menu.
 const SNAPSHOT_LAYER := 20
+## The cheat typed in a level that turns gore on or off (0x42c5f0).
+const GORE_CHEAT := "TOOSCARYFORME"
+
+## The last letters typed, for the cheat.
+var _typed := ""
 
 @onready var level: Level = $Level
 @onready var kurt: Kurt = $Kurt
@@ -314,6 +319,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == SNAPSHOT_KEY:
 		_ask_snapshot()
+	if event is InputEventKey and event.pressed and not event.echo:
+		_type(event.keycode)
+
+
+## Letters typed in a level: `TOOSCARYFORME` turns gore on or off (not saved).
+func _type(keycode: Key) -> void:
+	if keycode < KEY_A or keycode > KEY_Z:
+		return
+	_typed = (_typed + OS.get_keycode_string(keycode)).right(GORE_CHEAT.length())
+	if _typed != GORE_CHEAT:
+		return
+	_typed = ""
+	Settings.gore = not Settings.gore
+	if scripts.vm:
+		scripts.option = 1 if Settings.gore else 0
 
 
 ## The level and Kurt for a full save (the save's header names this level).

@@ -1,6 +1,6 @@
 ## Player settings (`user://settings.cfg`): sound volumes, the music filter, the mouse, the window,
-## the difficulty and the key bindings (one key or mouse button per action, replacing the defaults
-## of the project's input map). Applied at start and whenever they change.
+## the difficulty, gore and the key bindings (one key or mouse button per action, replacing the
+## defaults of the project's input map). Applied at start and whenever they change.
 ##
 ## Sounds go through two buses under `Master`: `Music` (the arena and menu music) and `Effects`
 ## (everything else; players created on `Master` are moved there). `Master` has a limiter so that
@@ -22,6 +22,11 @@ var invert_mouse := false
 var fullscreen := false
 ## 0 easy, 1 normal, 2 hard.
 var difficulty := 1
+## Gore (the original's `0x5742dc`, on by default): green sparks on aliens (else blue), slime when
+## they burst, blown off parts, the head shots row. The original has no menu item: the command
+## line switches `-bloodyes` / `-nobloodno` (here `--bloodyes` / `--nobloodno`, not saved) and the
+## cheat `TOOSCARYFORME` set it.
+var gore := true
 ## The game's actions in the order the controls screen lists them, with their names.
 const ACTIONS := {
 	&"move_forward": "Forward", &"move_back": "Back", &"turn_left": "Turn left", &"turn_right": "Turn right",
@@ -56,6 +61,12 @@ func _load() -> void:
 	invert_mouse = config.get_value("controls", "invert_mouse", invert_mouse)
 	fullscreen = config.get_value("video", "fullscreen", fullscreen)
 	difficulty = config.get_value("game", "difficulty", difficulty)
+	gore = config.get_value("game", "gore", gore)
+	var args := Args.get_all()
+	if args.has("bloodyes"):
+		gore = true
+	if args.has("nobloodno"):
+		gore = false
 	bindings = config.get_value("controls", "bindings", {})
 
 
@@ -69,6 +80,7 @@ func save() -> void:
 	config.set_value("controls", "invert_mouse", invert_mouse)
 	config.set_value("video", "fullscreen", fullscreen)
 	config.set_value("game", "difficulty", difficulty)
+	config.set_value("game", "gore", gore)
 	config.set_value("controls", "bindings", bindings)
 	config.save(PATH)
 

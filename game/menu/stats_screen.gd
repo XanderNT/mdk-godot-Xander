@@ -439,6 +439,9 @@ func _update_row(delta: float, speed: float) -> void:
 
 ## Head shots (0x433268): one spinning head a second (two a second when fast, all at once on Esc).
 func _update_head_row(delta: float, speed: float) -> bool:
+	# Without gore the row is left out (0x43290b).
+	if not Settings.gore:
+		return true
 	var count: int = GameState.stats.head_shots
 	if _row == ROWS.size():
 		_row_time += delta * speed
@@ -569,6 +572,6 @@ func _draw_score(shown: bool) -> void:
 		var text := ("%d/%d" % [value, _fulls[i]]) if i == 4 else ("%d%%" % value if i == 1 or i == 3 else "%d" % value)
 		var bytes := text.to_ascii_buffer()
 		_small.draw(_canvas, bytes, bar.x - _small.get_width(bytes) - 8, bar.y + 14)
-	if _row >= ROWS.size():
+	if _row >= ROWS.size() and Settings.gore:
 		var label := _fti.get_text_bytes("ST_HEAD")
 		_big.draw(_canvas, label, HEAD_LABEL.x - (_big.get_width(label) >> 1), HEAD_LABEL.y)

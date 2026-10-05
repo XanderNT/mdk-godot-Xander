@@ -83,7 +83,8 @@ var alien_target: MDKObject
 var alarm_ticks := 0
 ## How the sky is drawn (`0x574304`, opcode 202): 0 normally.
 var sky_mode := 0
-## Option toggled by cheat codes (`if_option`, the original's `0x5742dc`), 1 by default.
+## Gore (`if_option`, the original's `0x5742dc`): 1 on, 0 off; from `Settings.gore`, toggled by
+## the cheat `TOOSCARYFORME`.
 var option := 1
 ## On-screen messages (`hud_message`), set by the game.
 var messages: HUDMessages
@@ -191,6 +192,7 @@ func setup(p_level: Level, p_kurt: Kurt) -> void:
 	kurt.item_used.connect(items.use_item)
 	kurt.bomb_triggered.connect(items.trigger_bomb)
 	kurt.can_use_item = items.can_use
+	option = 1 if Settings.gore else 0
 	# No town to save in the last level (index 5, LEVEL5).
 	if GameState.index_of(level.number) != 5:
 		town_ticks = TOWN_TICKS[kurt.inventory.difficulty]
@@ -987,7 +989,9 @@ func _break_up(obj: MDKObject) -> void:
 		return
 	debris.break_up(obj, model, get_resolver(obj.arena))
 
-	# Slime drops thrown like the pieces.
+	# Slime drops thrown like the pieces, with gore (0x43d55e).
+	if not option:
+		return
 	var velocity := obj.mdk_position - obj.previous_position
 	for i in GORE_DROPS:
 		var throw := Vector3(randi() % 32768 - 0x4000, randi() % 32768 - 0x4000, randi() % 32768 - 0x800) / 16384.0
@@ -1102,12 +1106,13 @@ const DTI_STATIC_FLAGS := MDKObject.FLAG_PICKUP | MDKObject.FLAG_NOT_SOLID_2 | M
 const TRIGGER_SHOW := 1
 const TRIGGER_LOAD := 3
 
-## Sparks (0x41e8f4): on objects (green, the original's blue without its gore option), on
+## Sparks (0x41e8f4): on objects (green, blue without gore: 0x41e919), on
 ## indestructible objects and walls (grey, half as fast), on groups that react to the hit
 ## (orange), and fire (explosions without a break-up model, the nuke).
 enum Spark { FLESH, HARD, GROUP, FIRE }
 ## Palette colours `base, range` of each kind.
 const SPARK_COLOURS := [Vector2i(3, 3), Vector2i(0x25, -16), Vector2i(10, 3), Vector2i(0x30, 0x10)]
+const SPARK_FLESH_NO_GORE := Vector2i(13, 3)
 const SPARK_SIZE := 0.5
 const SPARK_SLOW := 0.5
 const FIRE_SPARKS := 16
@@ -1299,7 +1304,7 @@ func spark(point: Vector3, count: int, sound_name := "", kind := Spark.FLESH) ->
 	# The ricochet every 4 frames (always for bursts).
 	if count > 1 or _tick_count & 3 == 0:
 		play_sound_at(sound_name if not sound_name.is_empty() else ["RICO1", "RICO2", "RICO3"][randi() % 3], point)
-	var colours: Vector2i = SPARK_COLOURS[kind]
+	var colours: Vector2i = SPARK_COLOURS[kind] if kind != Spark.FLESH or option else SPARK_FLESH_NO_GORE
 	debris.spark(current_arena, point, count, SPARK_SIZE, colours.x, colours.y, SPARK_SLOW if kind == Spark.HARD else 1.0)
 
 

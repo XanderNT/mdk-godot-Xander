@@ -69,14 +69,15 @@
 
 ## Next
 
-2. **Menu**: the original font in the main menu, the gore option (taken as on), the level select.
+2. **Menu**: the original's options sub-pages and mouse cursor, the `SEETHEWHOLEGAME` debug mode.
 3. **Special materials**: mirrors, glass, animated water.
 4. **Small gaps**: doors moved into a newly loaded arena (`spawn_connector`), the fans' fire
    sparks, the ricochet sound's "pool empty" rule, the `XE` aim ray against objects, sky mode −1.
 
 ## Menu
 
-- Main menu (new game, load game, options, quit), pause menu, level select (partly done).
+- Main menu (new game, load game, options, quit), pause menu, level select, drawn in the original's
+  font and layout (`MenuItems`); "Really Quit?" on Esc; gore as an option, switch and cheat.
 - Options: sound volumes, music filter, mouse, fullscreen, difficulty and key bindings (one key or
   mouse button per action) are done; still to do: the enhanced mode below. The pause menu (Esc) has
   resume, options, main menu, quit.

@@ -2140,7 +2140,7 @@ The player state is a 0x458-byte struct (menu: `0x57ed40`, end: `0x5994a0`).
 - **Over MDK12** ✅: the menu items (0x42c488, at y 0x1f + 0x24·i, centred) and the mouse cursor (0x42c010). The FLC palette replaces all 256 entries, so the text colours come from the FLC palette ❓.
 - **Over the end FLC**: nothing is drawn, only a palette flash (§3) ✅.
 - **Skip keys**:
-  - menu/intro FLCs: any key (`0x57ea5c` = any key held, armed by `0x57f19c` once all keys are released). Function keys pressed at that moment are remembered (0x4278d0 → `0x57f198`) and open that screen in the menu.
+  - menu/intro FLCs: any key (`0x57ea5c` = any key held, armed by `0x57f19c` once all keys are released). In the debug mode of `SEETHEWHOLEGAME`, item keys 3–8 pressed at that moment are remembered (0x4278d0 → `0x57f198`) and start that level (see "Menus").
   - MDK12 in the menu: nothing to skip (the menu works during it).
 
 ### End movie extras (0x477604, frame counter `n` = `0x599914`, 0-based, checked before decoding frame n)
@@ -2236,6 +2236,347 @@ Header check (0x485fb0): 20-byte `"Interplay MVE File\x1a\0"`, `u16 0x1a`, `u16 
 
 - MDK12: decode into a 600×360 image at 29.4 fps, no loop. Keep the last frame. Menu items and cursor on top. Slideshow afterwards.
 - MDKEND: 316 frames at the game rate, sound and flash table above, then the MVE. Godot can't play MVE: convert it offline (ffmpeg reads it) to OGV, or write a decoder.
+
+## Menus
+
+✅ verified in code/data, ❓ guess. Coordinates are in the 600 × 360 view, whose origin is screen
+(20, 60) of 640 × 480.
+
+**In the port** (`MenuItems`, `MenuEntry`): every page is drawn in `FONTBIG` (`FONTSML` when the
+rows get below 24, the key bindings) through `SYS_PAL`, rows of 36 from y 5 (baselines 31 + 36 ×
+row; longer pages get lower rows), the selected item growing from 65 % to full size in 5 ticks
+and the one left shrinking back, `SND_PUSH` on each move. The main page is a column at the view's
+left edge (items centred on half its width), the others are centred; the view is fitted to the
+window as the videos are. Esc on the main page asks `ABORT1` "Really Quit?" (rows 3–5, Y/J/O/S/T
+yes, N or Esc no). Kept from the port, not in the original: the "Level" item, the pause menu
+(the original's Esc goes straight to "Really Quit?"), the options page (volumes, mouse, window,
+difficulty, gore, keys). Gore: `Settings.gore` (saved, default on), the switches `--bloodyes` and
+`--nobloodno`, and the cheat `TOOSCARYFORME` typed in a level (`runtime.option`); without it flesh
+sparks are blue, objects burst without slime, op 129 mode 2 blows nothing off, bullet holes are
+`BHOLE2` and the Score-O-matic leaves out the head shots. Not done: the original's options
+sub-pages, its mouse cursor (`ARROW`), the key repeat (30 ticks, then every 3), the debug mode of
+`SEETHEWHOLEGAME`.
+
+### Common machinery
+
+#### Fonts (`MDKFONT.FTI`, 0x41576c) ✅
+
+| Entry | Global | Space width | Draw (x = left, y = baseline) |
+| --- | --- | --- | --- |
+| `FONTBIG` | `0x574424` | 6 | 0x415a20 (scale 1), 0x415d8c (scaled), width 0x4159d4 |
+| `FONTSML` | `0x574420` | 4 | 0x415bd8, width 0x415b8c |
+
+- Font = 256 × u32 glyph offsets (0 = no glyph, advance by the space width), glyph = `i8 top`,
+  `i8 bottom`, `u8 width`, then `width × (top + bottom + 1)` palette indices, 0 transparent. Rows
+  start at `baseline − top`. Advance = glyph width, no kerning.
+- Pixels are palette indices 1–62 (FONTSML also uses 1–59), drawn through the current palette LUT
+  `0x581c28`.
+- Centred helpers: 0x415b30 (FONTBIG, x = (600 − w) / 2; falls back to FONTSML if w > 599),
+  0x415d44 (FONTSML centred), 0x415ff0 (FONTBIG centred, scaled: x = round((600 − w·s) / 2)).
+- `param_1` ≠ 0 on the draw functions adds a **blinking selection box** (0x415914): two nested
+  rectangle outlines around the text, colours 1/2 swapped every 8 ticks (`timer & 8`). FONTBIG
+  menus never use it (they scale instead); the FONTSML pages (keyboard, mouse, joystick, saved
+  games) do.
+- `FONTSML` holds icon glyphs for special keys: the key-name tables map scancodes to codes 1–0x1f
+  and 0x80–0x92 (Esc, Backspace, Tab, Enter, Ctrl, Shift, Alt, Space, Caps, F1–F12, arrows…).
+
+#### Text colours ✅
+
+The glyphs only use palette entries 1–63. `SYS_PAL` (FTI, 64 RGB triplets, entry 0 forced black
+by 0x4022c4, copied to `0x5735e4`) defines them. `MDK12.FLC`, all `MDKS_00n.GIF` and all
+`LOAD_n.LBB` palettes carry the same 63 entries (checked byte for byte), so the menu text has the
+same colours whatever image is behind it. **The port can render the glyphs through `SYS_PAL`.**
+Useful entries: 0 black, 1 white, 2 (155,255,0), 3 green, 4 (0,151,0), 6 cyan, 14 (0,0,195).
+
+#### The growing selection (0x42c374) ✅
+
+`scale(active, key_x, key_y)`, an item being identified by its (x, y) pair:
+
+| Item | Scale |
+| --- | --- |
+| selected, `t` ticks since it was selected (`0x57f2ec`, advanced by the frame's ticks on the `active` call) | `0.65 + t × 0.35 × 0.2` until t = 5, then 1.0 |
+| previously selected, t < 5 | `1 − t × 0.07` (shrinks back) |
+| other | 0.65 |
+
+Scaled glyphs keep the baseline (0x415d8c, nearest-neighbour, 16.16 steps); below 0.05 nothing is
+drawn. Callers: 0x42c488 (FONTBIG centred on a given x: `x = cx − w·s/2`), 0x42c4d8 (FONTBIG
+centred on 300), 0x42c460 (FONTBIG left at x = 4).
+
+#### Input helpers ✅
+
+Key flags come from a 128-bit scancode bitmap (`0x4921f8`), extended keys in the 0x60 range
+(0x67 Up, 0x69 Left, 0x6a Right, 0x6c Down, 0x66 Home, 0x6b End, 0x68 PgUp, 0x6d PgDn).
+
+| Helper | Key | Behaviour |
+| --- | --- | --- |
+| 0x42c104 | Up (`0x57ea48`) | auto-repeat: at once, then after 30 ticks every 3 ticks |
+| 0x42c188 | Down (`0x57ea4c`) | same |
+| 0x42c20c | Left (`0x57ea40`) | same |
+| 0x42c290 | Right (`0x57ea44`) | same |
+| 0x42c0b4 | Enter (edge, `0x57ea54`) or mouse button (`0x57eb20`, edge) | activate |
+| — | Esc (edge, `0x57ea50`) | back (each page tests it itself) |
+
+Each of these plays **`SND_PUSH`** (WAV in `MDKFONT.FTI`, 0x42c084, unless `0x4913a4`) when it
+fires. Mouse hover does not click. The sound page plays `OPTBUTT` instead.
+
+Mouse: cursor `0x57eb14/0x57eb18`, clamped to x ≤ 590, y ≤ 350 on every page; rows are picked
+from y only (any x), when the mouse moved (`0x57eb24/28`) or a button is held.
+
+#### Cursor (0x42c010) ✅
+
+`ARROW` (FTI) is a one-frame RLE sprite (same format as `K_*`), 8 × 17, hotspot (0, 0), drawn at
+the mouse position last, on every page.
+
+### Main menu (game state 0, 0x4265c0) ✅
+
+Background: `MDK12.FLC` (then the attract slideshow, see gameplay.md "Videos"). No title.
+
+| Row | Text | y (baseline) | Action on Enter / click |
+| --- | --- | --- | --- |
+| 0 | `OPT0` "Continue" (only if `LASTGAME.SAV` is valid, `0x57f1a0`) | 31 | 0x426504 (stop music, free menu), load `LASTGAME.SAV` (0x430930); failure → 0x42618c(0) |
+| 1 | `OPT1` "New Game" | 67 | 0x426504(1), 0x4240a0(0): level index 0, statistics/briefing (state 6) |
+| 2 | `OPT2` "Saved Game" | 103 | 0x426504(2), 0x428cfc (list) |
+| 3 | `OPT3` "Options" | 139 | 0x429730 (options page) |
+| 4 | `OPT4` "Quit" | 175 | quit the program (`0x57425e` = 1) |
+
+- Without "Continue" the rows shift up: New Game at y 31 … Quit at y 139 (y = 31 + 36·k, k = visible index).
+- **x**: every item is centred on `cx = max_width / 2`, max over all five texts in FONTBIG (OPT0 is
+  measured even when hidden). English: widths 158/190/224/139/75 → cx = 112 (screen x 132). So the
+  menu is a column at the **left edge of the view**, not centred on screen.
+- FONTBIG, scale from 0x42c374 (selected grows 0.65 → 1.0 in 5 ticks).
+- Initial selection (0x42618c): Continue if present, else New Game.
+- Up/Down wrap (4 ↔ 0, or 4 ↔ 1 without Continue). Mouse row = `(y − 5) / 36` (+1 without Continue),
+  valid rows only. Navigation resets the slideshow timer.
+- **Esc** opens the "Really Quit?" prompt (main loop 0x401cb8 → 0x403cf8; Yes quits the program).
+  F-keys do nothing in the main menu (the F-key dispatch in 0x401cb8 needs a level, state ≠ 0).
+  Correction to gameplay.md "Skip keys": 0x4278d0 remembers the item keys 3–8, not function keys,
+  and only in the debug mode below.
+- The items are hidden while the first slideshow GIF shows (`0x4911c0` = 1).
+- `OPTSTRT` "Starting New Game..." has no code reference (unused) ✅.
+
+#### No level select ✅
+
+The retail menu has no level item. A hidden debug mode exists: the cheat **`SEETHEWHOLEGAME`**
+(typed in a level, toggles `0x5742bc`) enables, in the main menu:
+
+| Key | Effect |
+| --- | --- |
+| `3`…`8` (item keys 3–8, `0x57eb78…0x57eb8c`) | 0x426574: start `LEVELn` directly (table `0x490030` = {7,6,3,4,8,5,2,1} gives the index), no briefing/fall |
+| `F` (`0x57ea64`) | the fall of level index 4 (0x410018) |
+| `S` (`0x57ea80`) | the stream, level index 0 (0x433b50) |
+| `D` (`0x57ea60`) | the statistics screen with random counters (0x431b00(0)) |
+
+The port's "Level: N" item is not in the original; keep it behind a debug flag or drop it.
+
+### Options page (overlay 11, 0x4298f8; opened by 0x429730 from the menu or F12 in game) ✅
+
+On a cleared (black) screen; the palette is saved (`svlut`) and replaced by `SYS_PAL`; the game
+(if any) is paused. FONTBIG, centred on x = 300, y = 31 + 36·row, growing selection (0x429838).
+Selection `0x57f240`, starts at 9 (Quit).
+
+| Row | Text | y | Action (Enter/click; Left/Right too) |
+| --- | --- | --- | --- |
+| 0 | `OM_HELP` "Help" | 31 | 0x425e70 → help page |
+| 1 | `OM_SOUND` "Sound" | 67 | 0x42bb6c → sound page |
+| 2 | `OM_JOY` "Joystick" | 103 | 0x428454 → joystick page |
+| 3 | `OM_MOUSE` "Mouse" | 139 | 0x42a0d4 → mouse page |
+| 4 | `OM_KEY` "Keyboard" | 175 | 0x427a60 → keyboard page |
+| 5 | `OM_PERF` "Performance" | 211 | 0x42a8e0 → performance test |
+| 6 | `OM_SK_0/1/2` "Skill - Easy/Normal/Hard" | 247 | Enter/Right +1, Left −1, wraps (`Skill`, `0x57423e`) |
+| 7 | `OM_DISPL` "Display" | 283 | 0x425940 → display page |
+| 8 | "Direct3D" (literal, not `OM_3D`) | 319 | 0x475fe8 → Direct3D page |
+| 9 | `OM_QUIT` "Quit" | 355 | 0x4297a8: close |
+
+- Rows 2–4 are hidden and skipped when `0x5742c4` is set (command-line `-mapok` toggles it).
+- Mouse row `(y − 5) / 36`, 0–9. Esc = Quit.
+- Close (0x4297a8): writes `MDK.CFG` if anything changed (`0x57424a`), restores the palette,
+  resumes the game. From the menu it returns to the main menu without replaying MDK12 (the FLC just
+  continues).
+- The dispatcher on `0x574263` (overlay) in 0x401cb8: 1 saved list 0x429100, 2 sound 0x42bd20,
+  3 joystick 0x428638, 4 mouse 0x42a258, 5 keyboard 0x427bbc, 6 performance 0x42ae18, 7 display
+  0x425b08, 8 save prompt 0x42b75c, 9 abort prompt 0x403eb4, 10 help 0x425f60, 11 options 0x4298f8,
+  14 Direct3D 0x476160.
+
+### Sub-pages ✅
+
+All on black, cursor drawn, back with Esc.
+
+#### Sound (0x42bb6c open, 0x42bd20 frame, 0x42bbc0 close)
+
+- Stops `MAINSONG`, loads `MISC/MDKSOUND.SNI`, loops `OPTSONG`; `OPTBUTT` on every key.
+- `SND_TITL` "Sound Settings" centred y 31; `SND_INFO` "Left/Right to Change Volumes" centred y 350
+  (FONTBIG).
+- Rows i = 0..2, baseline 87 + 46·i: "Effects" (`SND_FX`, `SoundFX`), "Music" (`SND_MUSI`,
+  `SoundMusic`): label FONTBIG left at x 4 (growing selection); bar = filled rect colour 4 from
+  x 210 to 210 + vol·280/100, y 75 + 46i … 86 + 46i; `SND_0` "0%" FONTSML at x 175, `SND_100`
+  "100%" at x 498. Row 2 `SND_DONE` "Done" FONTBIG centred.
+- Left/Right ±10, clamped 0–100, applied at once (0x403114). Mouse row `(y − 61) / 46`.
+  Enter on Done or Esc closes. `SND_SET` / `HMI_*` (DOS device setup) unused here.
+
+#### Display (0x425940 open, 0x425b08 frame)
+
+- Rows (FONTBIG centred, growing): y 31 `DSP_BRGT` "Brightness %d" (0–7, `Brightness`
+  `0x574242`), y 67 `DSP_DETH`/`DSP_DETL` "Detail is High/Low" (`ForcePCorrect` `0x574246`),
+  y 103 `DSP_QUIT` "Quit". Mouse row `(y − 5) / 36`.
+- Left/Right/Enter change; brightness reloads the palette at once (F11 in game also cycles it,
+  0x425ab4).
+- Below: four 48-step ramps (grey, red, green, blue; palette entries 64–111, 112–159, 160–207,
+  208–255 = i·255/47), each step a 10 × 32 box from x 60, rows at y 200, 232, 264, 296 (0x4258a0).
+
+#### Help (0x425e70 open, 0x425f60 frame)
+
+`HELP_TOP` centred FONTBIG y 31; `HELP_01`…`HELP_18` FONTSML at y 60 + 16·i, the text before the
+tab at x 4, after it at x 150; `HELP_BOT` FONTSML centred y 354. Any of Enter/arrows/Esc returns
+to the previous overlay (or the game, F1).
+
+#### Keyboard (0x427a60 open, 0x427bbc frame)
+
+- 19 bindings, FONTSML, column = i / 10, row = i % 10: label at x 10 + 310·col, key glyph at
+  x 210 + 310·col, y 64 + 30·row. Order: Left, Right, Up, Down, Jump, Strafe Left, SideStep,
+  Strafe Right, Sniper, Fire, Turbo, SetTurbo, Look Up, Look Down, Zoom In, Zoom Out, Next Item,
+  Last Item, Use Item (`KM_*`).
+- `KM_RESET` "Set Defaults" centred y 16 (restores `0x491935`), `KM_QUIT` "Quit" centred y 32.
+- The key is shown as one character from a per-language table (`0x4911d0` English, `0x491250`
+  `LANG` = F, `0x4912d0` = G).
+- Selection: blinking box on the label; Enter → waiting (box on the key, `KM_DOIT` "Type New Key,
+  ESC to Cancel" centred y 354), next key stored (`Key*` in `MDK.CFG`).
+- Arrows (all four) move through 0–20 with wrap; mouse: y 2–17 → Set Defaults, 18–33 → Quit,
+  else row `(y − 50) / 30`, +10 if x > 319.
+
+#### Mouse (0x42a0d4 open, 0x42a258 frame) / Joystick (0x428454, 0x428638)
+
+Same layout (FONTSML): left column centred on x 150, y 16 + 16·i: `JOY_TEST` "Test",
+`M_ENA`/`M_DIS` (`MouseOn`), `M_NORM`/`M_REV` (`MouseYReversed`), `JOY_QUIT` "Quit"; axis rows at
+the bottom left with a bar; a test box (50, 110)–(150, 210) with a dot following the motion; on the
+right a 16-row grid `JOY_BA`…`JOY_BP` (actions) × buttons (4 for the mouse) of check boxes
+(`MouseWButtMapA…D`). The joystick page has `JOY_ENA/DIS`, `JOY_GPAD/JOY_PROP`. Low priority for
+the port ❓ (details not mapped).
+
+#### Performance (0x42a8e0, 0x42ae18)
+
+`PRF_TEST` centred y 31; reference rows `PRF_P90`, `PRF_P166`, `PRF_P200`, `PRF_THIS` FONTSML at
+x 10, y 100/122/144/166; elapsed `PRF_ELAP`. A rendering benchmark; skip in the port.
+
+#### Direct3D (0x475fe8, 0x476160)
+
+English literals in the exe (not FTI): "Direct3D Configuration" centred y 31; rows i = 0..6 FONTSML,
+label x 100, value x 350, y 104 + 20·i: Bilinear filtering, Smooth shaded stream, Masked textures,
+Texture error detection, Max texture size, Kurt is a, Screen fades; "Test" y 244, "Quit" y 264.
+Bits of `D3DOptions`. Not relevant to the port.
+
+#### Saved games (0x428cfc open, 0x429100 frame, 0x428f9c close)
+
+- `SAVES/*.SAV`, names ≤ 8 chars, sorted (qsort, 0x428cf0).
+- `SVOPT1` "Select Saved Game\nESC to Quit": FONTBIG centred, lines at y 31 and 67 (0x42c314, 36 px
+  per line). None: `SVOPT3` centred at y 100.
+- Names FONTSML at x 98, y 103 + 16·i, 13 visible, blinking box on the selected one.
+- Preview: `LOAD_n.LBB` (light saves) centred on x 450 at y 103, or the 64 × 45 thumbnail at
+  (418, 103); the preview's palette is installed. `SVBAD` FONTSML at (10, 354) if unreadable.
+- Keys: Up/Down, Home/End, PgUp/PgDn (±13, repeat every 7 ticks), a letter/digit jumps to the first
+  name ≥ it; mouse row `(y − 103) / 16` + scroll, above 103 / below 311 scrolls. Enter/click loads,
+  Esc closes (from the menu: 0x42618c(0), MDK12 restarts).
+
+### Abort prompt "Really Quit?" (overlay 9, 0x403cf8 open, 0x403eb4 frame) ✅
+
+Opened by Esc (in a level and in the main menu; not in the statistics state 6 nor during the
+splash) and F10. Pauses the sounds, keeps the old palette (`0x49005c`) and sets entries 0–63 to
+`SYS_PAL`. Each frame on a cleared (black) screen:
+
+| Line | Text | y | Font |
+| --- | --- | --- | --- |
+| title | `ABORT1` "Really Quit?" | 139 | FONTBIG centred, scale 1 |
+| 0 | `ABORT2` "Yes" | 175 | FONTBIG centred on 300, growing |
+| 1 | `ABORT3` "No" | 211 | same |
+
+- Initial selection Yes (0). Up/Down wrap; mouse row `(y − 149) / 36`.
+- Enter/click on the selection; **Y, J, O, S, T** (`0x57ea8c`, multi-language yes) = Yes;
+  **N** (`0x57ea74`) or **Esc** = No.
+- Yes (0x403e08): in a level → unload it, back to the main menu (0x42618c(0), no splash); in the
+  menu → quit the program. No (0x403dbc): restore the palette and resume.
+
+### Pause (0x42d2a0) ✅
+
+Not a menu. **P** (`0x57ea78`) or **Pause** (`0x57eb10`) in a level toggles `0x490050`; P/Pause/Esc
+resume. The frozen frame stays; `PAUSED` "Game Paused" FONTBIG centred at y 150 on a black box
+(0x42d220: filled colour 0 from x 296 − w/2 to 304 + w/2, y 120–157, white outline 298 − w/2 …
+302 + w/2, y 122–155). It blinks: shown 30 ticks, hidden 15 (period 45 ticks = 1.5 s).
+
+### In-game function keys (0x401cb8, level loaded, no overlay) ✅
+
+| Key | Action |
+| --- | --- |
+| F1 (`0x57eab4`) | help 0x425e70 |
+| F2 (`0x57eab8`) | save prompt 0x42b520(0) |
+| F3 (`0x57eabc`) | saved games 0x428cfc |
+| F10 (`0x57ead8`) | abort prompt 0x403cf8 |
+| F11 (`0x57eadc`) | brightness +1 (0x425ab4) |
+| F12 (`0x57eae0`) | options 0x429730 |
+| Esc | abort prompt |
+
+**There is no in-game pause menu with Resume/Options/Main menu**; Esc goes straight to "Really
+Quit?". The port's `PauseMenu` (Resume, Options, Main menu, Quit) is an invention.
+
+### Gore (`0x5742dc`) ✅
+
+**No menu item and no `MDK.CFG` key.** Default 1 (set at start, 0x40272c → 0x4027e6), not reset
+per game.
+
+| Setter | Effect |
+| --- | --- |
+| command line `-bloodyes` (0x402570) | 1 |
+| command line `-nobloodno` (0x402550) | 0 |
+| cheat `TOOSCARYFORME` typed in a level (0x42c5f0, 0x42d07e) | toggles, reloads `BHOLE`/`BHOLE2` |
+
+(Cheats and these switches are stored encoded: 0x42e060 shifts the i-th character from the end
+by 3 + 7i.)
+
+Tests:
+
+| Address | Function | With gore on / off |
+| --- | --- | --- |
+| 0x41b90f | `level_load` | sniper hit marker `BHOLE` / `BHOLE2` |
+| 0x41e919 | 0x41e8f4 sparks, kind 0 (flesh) | green (colours 3–6) / blue (13–16) |
+| 0x43290b | 0x4328a4 Score-O-matic | "Head shots" row shown / skipped |
+| 0x43d55e | 0x43d224 object break-up | up to 32 slime drops / none |
+| 0x45c4af | 0x45c498 op 129 mode 2 | parts blown off / names skipped |
+| 0x445579, 0x4485b9, 0x45706f | script interpreter (0x440bc8 area) | op 128 `attach_effect`, op 136 `spawn_debris` (1 drop when off), op 232 `if_option` ❓ (mapping of the three addresses to the ops not checked) |
+
+The gore colour is green vs **blue**, not red.
+
+### `MDK.CFG` (0x42e654 read, 0x42e9a0 write) ✅
+
+- Read at start: `getenv("mdk_cfg")` path, else `C:\MDK.CFG`, else `MDK.CFG`. Lines `key = value`,
+  `;` starts a comment, keys case-insensitive.
+- Written when leaving the options page with changes (`0x57424a`), to the same file: header
+  `; MDK Configuration file automatically generated by MDK`, then only keys that differ from the
+  defaults (`cddata`, `hddata`, `hduse` always).
+- Table `0x4913d0`, 95 entries of 9 bytes (`char *name, u8 type, void *var`); default =
+  `var − 0xe288d`. Types: 0 int `%d`, 1 float `%g`, 2 bool (`T…` = true), 3 string, 4 hex `0x%X`.
+
+| Key | Var | Default | Menu |
+| --- | --- | --- | --- |
+| `cddata`, `hddata`, `hduse` | 0x573fb4, 0x574034, 0x5740b4 | –, –, 2 | install paths |
+| `SoundFX`, `SoundMusic` | 0x5740cc, 0x5740d0 | 70, 100 | Sound |
+| `SoundIDX/ID/IRQ/DMA/Port` | 0x5740b8… | | DOS sound setup |
+| `JoyOn`, `JoyMin/Cen/Max X/Y/Z`, `JoyType`, `Joy[WD]AxesMap`, `Joy[WD]ButtMap[A–L]` | 0x5740d4… | JoyOn 0 | Joystick |
+| `Mouse[WD]AxesMap`, `Mouse[WD]ButtMap[A–D]`, `Mouse[WD][XYZ]Scale` | 0x574178… | | Mouse |
+| `MouseOn`, `MouseYReversed` | 0x574236, 0x57423a | 1, 0 | Mouse |
+| `KeyLeft`…`KeySideR` (19) | 0x5741c2… | scancodes, table 0x491935 | Keyboard |
+| `Skill` | 0x57423e | 1 (Normal) | Options row 6 |
+| `Brightness` | 0x574242 | 0 | Display, F11 |
+| `ForcePCorrect` | 0x574246 | false | Display "Detail" |
+| `D3DOptions` | 0x57424e | (bits) | Direct3D |
+| `S3DOn`, `S3DDoppler`, `S3DFallOff` | 0x574252… | | none |
+
+### Port gaps
+
+- Replace Godot buttons by FTI glyphs (FONTBIG/FONTSML) drawn through `SYS_PAL`, positions above,
+  growing selection, `ARROW` cursor, `SND_PUSH` on keys.
+- Main menu: left column centred on x 112 of the view; drop "Level: N" (or debug only).
+- Options: Help, Sound, (Joystick), Mouse, Keyboard, Skill, Display, Quit; drop Performance and
+  Direct3D. Port-only extras (master volume, music filter, fullscreen, sensitivity) need a place ❓.
+- Esc in a level → "Really Quit?" Yes/No, P/Pause → blinking "Game Paused"; F1/F2/F3/F10/F11/F12.
+- Gore: a port setting (default on) or the `TOOSCARYFORME` cheat; nothing in the original UI.
 
 ## Saving and loading (`savegame.c`, `optload.c`)
 

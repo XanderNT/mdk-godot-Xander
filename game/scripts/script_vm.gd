@@ -1083,8 +1083,9 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 					return _branch(obj, ins, true)
 				last.leader = null
 				last.move_command = 0
-		129:  # blow_off_parts: the parts go (the debris isn't drawn yet) and stay hidden
-			if o[0] in [0, 1, 2] and obj.model:
+		129:  # blow_off_parts: the parts go (the debris isn't drawn yet) and stay hidden; mode 2 only
+			# with gore (0x45c498)
+			if o[0] in [0, 1, 2] and obj.model and (o[0] != 2 or runtime.option):
 				var mask := 0
 				for part_name: String in o[1]:
 					var part := obj.find_part(part_name)

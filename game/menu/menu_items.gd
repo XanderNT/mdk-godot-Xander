@@ -157,6 +157,8 @@ func show_options(on_back: Callable) -> void:
 			func(_step: int) -> void: Settings.fullscreen = not Settings.fullscreen)
 	add_option(func() -> String: return "Difficulty: %s" % ["Easy", "Normal", "Hard"][Settings.difficulty],
 			func(step: int) -> void: Settings.difficulty = wrapi(Settings.difficulty + step, 0, 3))
+	add_option(func() -> String: return "Gore: %s" % _on_off(Settings.gore),
+			func(_step: int) -> void: Settings.gore = not Settings.gore)
 	add_item("Controls", func() -> void: show_controls(show_options.bind(on_back)))
 	add_item("Back", func() -> void:
 		Settings.save()

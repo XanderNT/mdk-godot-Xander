@@ -1055,7 +1055,7 @@ the level's arenas):
 `MDKDebris` moves the sparks and the break-up pieces with the shattered triangles (one mesh rebuilt
 every tick; sparks as flat vertex-coloured triangles, `colour = base + range × |facing|`); smoke
 trails are `MDKEffects` `TRAIL` sprites. `MDKScriptRuntime.spark()` makes the bursts (kinds
-`FLESH`, `HARD`, `GROUP`, `FIRE`; the gore option is taken as on, so flesh sparks are green), and
+`FLESH`, `HARD`, `GROUP`, `FIRE`; flesh sparks are green with gore, blue without: `Settings.gore`, see gameplay.md "Menus"), and
 `explode()` the break-up, gore drops, white flash and pitch thresholds; the nuke adds its 16 fire
 sparks. Test: `--sparks`. Not done: fire sparks for the fans (they're
 `CPUParticles3D`), the "is the pool empty" rule of the ricochet sound.
