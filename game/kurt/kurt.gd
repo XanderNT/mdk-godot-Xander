@@ -478,8 +478,10 @@ func _physics_process(delta: float) -> void:
 	push = Vector2(move_toward(push.x, 0.0, PUSH_DRAIN * delta), move_toward(push.y, 0.0, PUSH_DRAIN * delta))
 
 	if walk_mode == Walk.RIDING:
-		# Hidden in the `XD2`, he stands (no footsteps).
+		# Hidden in the `XD2`, he stands (no footsteps); he doesn't collide with the walker he sits in
+		# (the original's moves ignore the ridden object).
 		velocity.y = maxf(velocity.y - GRAVITY * delta, -MAX_FALL_SPEED)
+		_update_inside_bodies()
 		move_and_slide()
 		_set_state(State.STILL)
 		return

@@ -243,6 +243,8 @@ var _body: AnimatableBody3D
 var _body_shapes: Array[CollisionShape3D] = []
 ## Pose the body's boxes were last built for.
 var _body_key := ""
+## Bodies that pass through the object (`add_collision_exception`).
+var _exceptions: Array[PhysicsBody3D] = []
 ## Shared cache of built meshes: `"model|animation|frame|hidden parts"` to ArrayMesh.
 static var _mesh_cache := {}
 static var _baked := {}
@@ -478,6 +480,19 @@ func update_ropes() -> void:
 	mesh.surface_end()
 
 
+## `body` passes through the object (Kurt through the walker he rides).
+func add_collision_exception(body: PhysicsBody3D) -> void:
+	_exceptions.push_back(body)
+	if _body:
+		_body.add_collision_exception_with(body)
+
+
+func remove_collision_exception(body: PhysicsBody3D) -> void:
+	_exceptions.erase(body)
+	if _body and is_instance_valid(body):
+		_body.remove_collision_exception_with(body)
+
+
 func update_body() -> void:
 	# Kurt lands on standable objects (0x800000, `damp_gravity`) even if he passes through them.
 	var passable := flags & FLAG_NOT_SOLID or (flags & FLAG_NOT_SOLID_2 and not flags & FLAG_STANDABLE)
@@ -494,6 +509,8 @@ func update_body() -> void:
 		_body.collision_layer = 2
 		_body.collision_mask = 0
 		add_child(_body)
+		for body in _exceptions:
+			_body.add_collision_exception_with(body)
 		for part in model.parts:
 			var shape := CollisionShape3D.new()
 			shape.shape = BoxShape3D.new()

@@ -10,6 +10,9 @@
 ##   --walk=seconds            Hold "move forward" for this long (for automated tests).
 ##   --fire                    Hold "fire" (for automated tests).
 ##   --jump                    Hold "jump" after the delay (for automated tests: the chute).
+##   --ride=TYPE               Put Kurt on the first walker of that type after the delay (tests).
+##   --kill=TYPE               Kill the first object of that type after the delay, then wait 3 s
+##                             for its death (tests: the XD2 slumps before it can be ridden).
 ##   --health=N                Start with this much health (for tests).
 ##   --give=SW_A,SW_B          Start with these pickups (for tests).
 ##   --use                     Press "use item" after the delay (for tests).
@@ -47,6 +50,8 @@ extends Node3D
 const BOMBER_ARENA := "DANT_5"
 const BOMBER_CALL_GROUP := 16
 const BOMBER_CALL_DELAY := 1.0
+## `--kill` waits this long after the kill.
+const KILL_SETTLE := 3.0
 ## The end of the game (game state 8).
 const END_MOVIE := "res://game/video/end_movie.tscn"
 ## F2 makes a full save (0x42b520(0)), offering the level's number as its name.
@@ -214,6 +219,15 @@ func _ready() -> void:
 		await _board_bomber()
 		if args.bomber == "drop":
 			await _drop_bomb()
+	if args.has("ride"):
+		var walker := scripts.find_object_named(args.ride)
+		if walker:
+			scripts.rides.ride_walker(walker)
+	if args.has("kill"):
+		var victim := scripts.find_object_named(args.kill)
+		if victim:
+			scripts.kill(victim)
+			await get_tree().create_timer(KILL_SETTLE).timeout
 	if args.has("jump"):
 		Input.action_press(&"jump")
 	if args.has("use"):

@@ -59,6 +59,12 @@ func on_board() -> bool:
 	return _board != null
 
 
+## Puts Kurt on a walker at once, as touching it does (tests: `--ride`).
+func ride_walker(obj: MDKObject) -> void:
+	obj.flags |= FLAG_RIDEABLE
+	_mount_walker(obj)
+
+
 ## Whether an object isn't drawn: the `XE` once the view is inside it.
 func hides(obj: MDKObject) -> bool:
 	return bomber != null and obj == ridden and bomber.hides_xe()
@@ -123,6 +129,8 @@ func _mount_walker(obj: MDKObject) -> void:
 	var kurt := _runtime.kurt
 	ridden = obj
 	obj.flags |= FLAG_RIDDEN
+	# The original's moves ignore the ridden object (`damp_collide_move`).
+	obj.add_collision_exception(kurt)
 	kurt.stop_firing()
 	kurt.global_position = MDKMeshBuilder.to_godot(obj.mdk_position)
 	kurt.yaw = deg_to_rad(obj.yaw - 90.0)
@@ -181,6 +189,7 @@ func _dismount() -> void:
 		kurt.get_off_board(0.0, 0.0)
 		bomber = null
 	elif ridden:
+		ridden.remove_collision_exception(kurt)
 		_runtime.mixer.stop_voice(_walker_sound)
 		_walker_sound = null
 		kurt.jump_off()
