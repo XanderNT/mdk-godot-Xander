@@ -3,7 +3,8 @@ uniform sampler2D index_texture : filter_nearest, repeat_enable;
 uniform sampler2D palette : source_color, filter_nearest;
 // Animated textures: frames are stacked vertically in `index_texture`.
 uniform int frame_count = 1;
-uniform float frames_per_second = 15.0;
+// Arena textures animate only when a script sets a speed (opcode 133, `M_COMM`).
+uniform float frames_per_second = 0.0;
 // Per object frame of animated textures (explosions follow their object's frame), -1 = by time.
 instance uniform int frame_index = -1;
 

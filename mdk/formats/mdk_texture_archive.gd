@@ -32,7 +32,7 @@ static func parse(bytes: PackedByteArray, base: int) -> MDKTextureArchive:
 		if kind == KIND_COLOR:
 			archive.colors[entry_name] = value
 		elif kind & KIND_ANIMATED_MASK:
-			archive.textures[entry_name] = MDKTexture.parse_animated(entry_name, bytes, base + offset)
+			archive.textures[entry_name] = MDKTexture.parse_animated(entry_name, bytes, base + offset, kind)
 		else:
 			archive.textures[entry_name] = MDKTexture.parse(entry_name, bytes, base + offset)
 	return archive
