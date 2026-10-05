@@ -18,6 +18,13 @@ const SPECIAL_MIRROR_LAST := 1010
 const SPECIAL_GLASS_FIRST := 1024  # `GLASS1`–`GLASS4`.
 const SPECIAL_GLASS_LAST := 1027
 const SPECIAL_RIPPLE := 1028  # Water.
+## Lift of a detail above the triangle it lies on, per layer (see `arena_positions`), and how
+## finely planes are told apart (1/64 of a unit).
+const LAYER_LIFT := 0.03
+const PLANE_STEPS := 64.0
+
+static var _positions_cache := {}
+
 ## Arena triangle flags (0x40b7f0): bit 23 outlines the triangle in its own colour, along the edges
 ## bits 20 (v0–v1), 21 (v1–v2) and 22 (v2–v0) pick.
 const OUTLINE := 1 << 23
@@ -100,6 +107,73 @@ static func to_godot(v: Vector3) -> Vector3:
 	return Vector3(v.x, v.z, -v.y)
 
 
+## The corners of every triangle of an arena (Godot coordinates), three per triangle. The original
+## draws without a depth buffer, back to front, so details lying on a wall in its plane (windows,
+## posters) simply cover it; with a depth buffer they'd flicker. So a triangle is lifted off its
+## plane, towards its front, by `LAYER_LIFT` for each bigger triangle of the same plane it lies on.
+##
+##   wall ──────────────  layer 0
+##   poster   ────        layer 1 (+0.03 towards the viewer)
+static func arena_positions(arena: MDKArena) -> PackedVector3Array:
+	var key := arena.get_instance_id()
+	if _positions_cache.has(key):
+		return _positions_cache[key]
+	var positions := PackedVector3Array()
+	positions.resize(arena.triangle_indices.size())
+	for i in positions.size():
+		positions[i] = to_godot(arena.vertices[arena.triangle_indices[i]])
+	_lift_layers(positions)
+	_positions_cache[key] = positions
+	return positions
+
+
+## Lifts the triangles lying on bigger ones of the same plane (see `arena_positions`).
+static func _lift_layers(positions: PackedVector3Array) -> void:
+	var count := positions.size() / 3
+	var normals := PackedVector3Array()
+	var areas := PackedFloat32Array()
+	normals.resize(count)
+	areas.resize(count)
+	var planes := {}
+	for t in count:
+		var cross := (positions[t * 3 + 2] - positions[t * 3]).cross(positions[t * 3 + 1] - positions[t * 3])
+		areas[t] = cross.length()
+		if areas[t] == 0.0:
+			continue
+		normals[t] = cross / areas[t]
+		var key := Vector4(roundf(normals[t].x * PLANE_STEPS), roundf(normals[t].y * PLANE_STEPS),
+				roundf(normals[t].z * PLANE_STEPS), roundf(normals[t].dot(positions[t * 3]) * PLANE_STEPS))
+		if not planes.has(key):
+			planes[key] = PackedInt32Array()
+		planes[key].push_back(t)
+
+	var lifts := PackedFloat32Array()
+	lifts.resize(count)
+	for triangles: PackedInt32Array in planes.values():
+		for a in triangles:
+			for b in triangles:
+				# Equal ones: the later in the data goes on top.
+				var bigger := areas[b] > areas[a] or (areas[b] == areas[a] and b < a)
+				if bigger and _covers(positions, b, a, normals[b]):
+					lifts[a] += LAYER_LIFT
+	for t in count:
+		if lifts[t] > 0.0:
+			for k in 3:
+				positions[t * 3 + k] += normals[t] * lifts[t]
+
+
+## Whether triangle `cover`'s plane triangle holds the centre of triangle `t`.
+static func _covers(positions: PackedVector3Array, cover: int, t: int, normal: Vector3) -> bool:
+	var centre := (positions[t * 3] + positions[t * 3 + 1] + positions[t * 3 + 2]) / 3.0
+	for i in 3:
+		var a := positions[cover * 3 + i]
+		var b := positions[cover * 3 + (i + 1) % 3]
+		var c := positions[cover * 3 + (i + 2) % 3]
+		if normal.dot((b - a).cross(centre - a)) * normal.dot((b - a).cross(c - a)) < 0.0:
+			return false
+	return true
+
+
 ## Builds the world mesh of an arena (or of some of its triangles), with one surface per material.
 ## `material_override` replaces the material value of every triangle (`group_set_texture`).
 static func build_arena_mesh(arena: MDKArena, resolver: MaterialResolver, triangles := PackedInt32Array(), material_override: Variant = null) -> ArrayMesh:
@@ -115,6 +189,7 @@ static func build_arena_mesh(arena: MDKArena, resolver: MaterialResolver, triang
 			by_material[material] = PackedInt32Array()
 		by_material[material].push_back(tri)
 
+	var all_positions := arena_positions(arena)
 	var mesh := ArrayMesh.new()
 	for material: Material in by_material:
 		var uv_scale: Vector2 = material.get_meta(&"uv_scale", Vector2.ZERO)
@@ -126,7 +201,7 @@ static func build_arena_mesh(arena: MDKArena, resolver: MaterialResolver, triang
 		var i := 0
 		for tri in surface_triangles:
 			for k in 3:
-				positions[i] = to_godot(arena.vertices[arena.triangle_indices[tri * 3 + k]])
+				positions[i] = all_positions[tri * 3 + k]
 				uvs[i] = arena.triangle_uvs[tri * 3 + k] * uv_scale
 				i += 1
 
