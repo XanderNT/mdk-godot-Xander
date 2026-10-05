@@ -802,9 +802,12 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 			if o[0].is_empty():
 				var offset := Vector3(o[2], o[3], o[4])
 				runtime.teleport_kurt("", runtime.kurt_position + offset, runtime.kurt_yaw + o[5])
-		103:  # if_kurt_in_box
-			var box := AABB(Vector3(o[0], o[1], o[2]), Vector3(o[3] - o[0], o[4] - o[1], o[5] - o[2]))
-			return _branch(obj, ins, box.has_point(runtime.kurt_position))
+		103:  # if_kurt_in_box: each axis between its min and max (corners given backwards never hold)
+			var kurt := runtime.kurt_position
+			var inside := true
+			for axis in 3:
+				inside = inside and kurt[axis] >= o[axis] and kurt[axis] <= o[axis + 3]
+			return _branch(obj, ins, inside)
 		115:  # if_wall
 			var from := obj.mdk_position + Vector3(0, 0, 2.0 if obj.flags & MDKObject.FLAG_COLLIDES else 0.0)
 			var direction: Vector2 = Vector2.from_angle(deg_to_rad(obj.yaw + o[0])) * o[1]
