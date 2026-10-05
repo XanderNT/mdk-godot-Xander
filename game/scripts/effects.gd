@@ -113,6 +113,7 @@ func _create(arena_name: String, texture_name: String, kind: Kind, point: Vector
 	effect.speed = speed
 	effect.frames = sheet[2]
 	effect.sprite = Sprite3D.new()
+	effect.sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	effect.sprite.texture = sheet[0]
 	effect.sprite.vframes = effect.frames
 	effect.sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED

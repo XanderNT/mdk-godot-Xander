@@ -26,6 +26,11 @@ var flip_h := false:
 var _material: ShaderMaterial
 
 
+## A flat sprite throws no shadow (the enhanced look's sun would cast its quad).
+func _init() -> void:
+	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 func setup(palette: MDKPalette) -> void:
 	mesh = QuadMesh.new()
 	# The quad is repositioned in the shader, so its bounds must cover the whole sprite.
@@ -34,6 +39,7 @@ func setup(palette: MDKPalette) -> void:
 	_material.shader = SPRITE_SHADER
 	_material.set_shader_parameter(&"palette", palette.get_texture())
 	_material.set_shader_parameter(&"depth_bias", depth_bias)
+	_material.set_shader_parameter(&"filtered", Settings.enhanced_graphics)
 	material_override = _material
 
 
