@@ -79,8 +79,8 @@ Each records list is `u32 count`, then 36-byte records:
 list at `arena+0x38`/`+0x3c`), 6 (connection, see below), 7, 8. ❓
 
 **Connections** (type 6) come in pairs with the same id (1000+), one in an arena and one in its
-corridor. The `angle` field is the direction Kurt crosses in (0 −x, 1 +x, 2 −y, 3 +y, 6 and 7 along
-z), `x, y, z` and the 12 name bytes (3 × f32) are the corners of the doorway. Every frame 0x41c550
+corridor. The `angle` field holds an integer, the direction Kurt crosses in to leave the arena (0 −x,
+1 +x, 2 −y, 3 +y, 6 −z, 7 +z), `x, y, z` and the 12 name bytes (3 × f32) are the corners of the doorway. Every frame 0x41c550
 checks whether Kurt's move crossed a connection of his arena inside the doorway; if so he's in the
 other arena (see [engine.md](engine.md#kurts-arena)). ✅
 

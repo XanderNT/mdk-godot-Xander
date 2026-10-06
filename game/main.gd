@@ -146,6 +146,7 @@ func _ready() -> void:
 		scripts.setup(level, kurt)
 		hud.scripts = scripts
 		$FollowCamera.scripts = scripts
+		$LevelAudio.scripts = scripts
 		scripts.level_ended.connect(_on_level_ended)
 		scripts.game_finished.connect(get_tree().change_scene_to_file.bind(END_MOVIE), CONNECT_DEFERRED)
 		# The music goes on during the full-screen strike.

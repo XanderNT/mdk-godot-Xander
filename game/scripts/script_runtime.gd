@@ -271,6 +271,8 @@ func teleport_kurt(arena_name: String, mdk_position: Vector3, yaw: float) -> voi
 		second_active = false
 		current_arena = arena_name
 		show_arena(arena_name)
+		# No move crosses a connection (0x41bce4 sets 0x5739cc too).
+		_previous_kurt_position = mdk_position
 	kurt.teleport(MDKMeshBuilder.to_godot(mdk_position), deg_to_rad(yaw - 90.0))
 	if arena_name.is_empty():
 		kurt.white_flash = maxf(kurt.white_flash, 255.0)
@@ -379,6 +381,57 @@ func _check_triggers() -> void:
 			preload_arena(arena_name)
 
 
+## The arena Kurt enters when his move crosses a connection of his arena (0x41c550, every tick),
+## or an empty string. E.g. LEVEL4 MEAT_7 1012 (+y at y = 14822) → CMEAT_7.
+func _crossed_arena(from: Vector3, to: Vector3) -> String:
+	for record: Dictionary in level.get_arena_records(current_arena):
+		if record.type == Level.CONNECTION and _crosses_doorway(record, from, to):
+			return level.get_connection(current_arena, record.id)
+	return ""
+
+
+## Whether an arena has a connection to another (the 1996 demo).
+func _connects(from: String, to: String) -> bool:
+	return level.get_arena_records(from).any(func(record: Dictionary) -> bool:
+		return record.type == Level.CONNECTION and level.get_connection(from, record.id) == to)
+
+
+## Whether a move goes out through a doorway: across its plane in its direction, the move within
+## (or across) the doorway on the other axes. A horizontal doorway's box reaches `DOORWAY_DROP`
+## below it; the diagonal ones only test where the move ends.
+static func _crosses_doorway(record: Dictionary, from: Vector3, to: Vector3) -> bool:
+	var low: Vector3 = record.position
+	var high: Vector3 = record.box_end
+	var bottom := low.z - DOORWAY_DROP
+	var plane := low.z - HATCH_DROP
+	var within_x := _spans(from.x, to.x, low.x, high.x)
+	var within_y := _spans(from.y, to.y, low.y, high.y)
+	var within_z := _spans(from.z, to.z, bottom, high.z)
+	var side := (to.x - low.x) * (high.y - low.y) - (high.x - low.x) * (to.y - low.y)
+	# The angle field holds an integer.
+	match PackedFloat32Array([record.angle]).to_byte_array().decode_s32(0):
+		Doorway.MINUS_X:
+			return within_y and within_z and to.x < low.x and from.x >= low.x
+		Doorway.PLUS_X:
+			return within_y and within_z and to.x > low.x and from.x <= low.x
+		Doorway.MINUS_Y:
+			return within_x and within_z and to.y < low.y and from.y >= low.y
+		Doorway.PLUS_Y:
+			return within_x and within_z and to.y > low.y and from.y <= low.y
+		Doorway.MINUS_Z:
+			return within_x and within_y and to.z < plane and from.z >= plane
+		Doorway.PLUS_Z:
+			return within_x and within_y and to.z > plane and from.z <= plane
+		Doorway.RIGHT:
+			return within_x and within_y and within_z and side > 0.0
+	return within_x and within_y and within_z and side < 0.0
+
+
+## Whether a move from a to b on one axis is within [low, high] or crosses it.
+static func _spans(a: float, b: float, low: float, high: float) -> bool:
+	return maxf(a, b) >= low and minf(a, b) <= high
+
+
 ## Whether a move crosses a box's edge (XY).
 static func _crosses(box: Rect2, from: Vector2, to: Vector2) -> bool:
 	var corners := [box.position, Vector2(box.end.x, box.position.y), box.end, Vector2(box.position.x, box.end.y)]
@@ -434,10 +487,18 @@ func _tick() -> void:
 		town_ticks -= 1
 		if town_ticks == 0:
 			_flatten_town()
-	# Kurt only goes into an arena connected to his (0x41c550); a teleport puts him anywhere.
-	var arena_name := level.get_arena_at(kurt.global_position)
-	if not current_arena.is_empty() and not level.connects(current_arena, arena_name):
-		arena_name = current_arena
+	# The first tick (also after loading a game) has no move.
+	if _tick_count == 0:
+		_previous_kurt_position = kurt_position
+	# Kurt changes arena only through a connection of his (0x41c550); a teleport puts him anywhere.
+	# The 1996 demo's connections have no direction: there his arena comes from the arena boxes.
+	var arena_name := ""
+	if current_arena.is_empty() or level.cmi.beta:
+		arena_name = level.get_arena_at(kurt.global_position)
+		if not current_arena.is_empty() and not _connects(current_arena, arena_name):
+			arena_name = current_arena
+	else:
+		arena_name = _crossed_arena(_previous_kurt_position, kurt_position)
 	if not arena_name.is_empty() and arena_name != current_arena:
 		# Crossing into another arena: the one left stays as the active second arena.
 		if not current_arena.is_empty():
@@ -599,7 +660,7 @@ func camera_track(obj: MDKObject, mode: int, height: float) -> void:
 	if mode == 0:
 		var bounds_top := obj.mdk_position.z + (obj.model.bounds.end.z * obj.model_scale if obj.model else 0.0)
 		top = 0.3 * obj.mdk_position.z + 0.7 * bounds_top
-	var rest := level.get_camera_pitch(kurt.global_position)
+	var rest := level.get_camera_pitch(current_arena)
 	var target := rest
 	if off <= 90.0 and top >= kurt_position.z:
 		var distance := Vector2(obj.mdk_position.x - kurt_position.x, obj.mdk_position.y - kurt_position.y).length()
@@ -1121,6 +1182,15 @@ const DTI_STATIC_FLAGS := MDKObject.FLAG_PICKUP | MDKObject.FLAG_NOT_SOLID_2 | M
 ## DTI trigger records: show an arena, load one ahead (0x41bf1c).
 const TRIGGER_SHOW := 1
 const TRIGGER_LOAD := 3
+## Connections (DTI type 6, 0x41c550): the doorway reaches this far below its floor (0x4945c8), a
+## hatch's plane is this far below its z (0x4945d0).
+const DOORWAY_DROP := 5.0
+const HATCH_DROP := 0.5
+
+## Which way a move goes through a connection to leave the arena (the DTI record's angle field, an
+## integer): across its x, y or z plane, or across the XY line from its first corner to the other,
+## ending on its left or right (unused by the levels).
+enum Doorway { MINUS_X, PLUS_X, MINUS_Y, PLUS_Y, LEFT, RIGHT, MINUS_Z, PLUS_Z }
 
 ## Sparks (0x41e8f4): on objects (green, blue without gore: 0x41e919), on
 ## indestructible objects and walls (grey, half as fast), on groups that react to the hit

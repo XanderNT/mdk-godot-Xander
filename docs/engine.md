@@ -253,11 +253,47 @@ the transition) or by a teleport (`teleport_player`, 112). Only Kurt's arena and
 of a transition are drawn and solid. Arenas that no connection leads to and that aren't the start
 arena can only be reached by a teleport; some are never used, and level 7's `DANT_8` (flat colours
 and `GLASS3`) lies over the start of `DANT_1`. The port keeps every arena loaded, but hides these
-and makes them not solid until a teleport takes Kurt there, and picks Kurt's arena from the
-smallest arena bounds that contain him, among the arenas connected to his (connection records
-paired by id), so a teleport into a room that overlaps another keeps him there; it draws only
+and makes them not solid until a teleport takes Kurt there, and changes Kurt's arena as the
+original does (below; the start arena is the smallest arena box around him); it draws only
 Kurt's arena and the second one (see
-[The second arena](#the-second-arena)).
+[The second arena](#the-second-arena)). The 1996 demo's connections have no direction, so there
+the port still picks the smallest arena box around Kurt among the arenas connected to his. ❓ how
+the demo does it.
+
+#### Crossing a connection (0x41c550) ✅
+
+`0x41c550(arena, prev, cur)` returns the arena entered when the move `prev → cur` leaves `arena`
+through one of its connections (first match in record order), else 0.
+
+- Records: `arena+0x38` count, `+0x3c` the 36-byte DTI records; type 6 only. At level load
+  `0x41c22c` pairs each record (id ≥ 1000) with the one of the same id in another arena (same box,
+  opposite direction, else a fatal "Mismatched connect" error) and **replaces both ids with the
+  other arena's index**.
+- Fields: `+8` direction (an **integer** in the `angle` field), `+0xc..+0x14` corner 1 `(x0, y0,
+  z0)`, `+0x18..+0x20` corner 2 `(x1, y1, z1)` (the name bytes).
+- Direction = the way the move goes to **leave** this arena (the paired record has the opposite):
+
+| Dir | Crossing (`prev` → `cur`) | Other axes (cur inside, or the move crosses a bound) |
+| --- | --- | --- |
+| 0 / 1 | `cur.x < x0 ≤ prev.x` / `prev.x ≤ x0 < cur.x` | y in [y0, y1), z in [z0 − 5, z1] |
+| 2 / 3 | `cur.y < y0 ≤ prev.y` / `prev.y ≤ y0 < cur.y` | x in [x0, x1), z in [z0 − 5, z1] |
+| 6 / 7 | `cur.z < z0 − 0.5 ≤ prev.z` / `prev.z ≤ z0 − 0.5 < cur.z` | x in [x0, x1], y in [y0, y1) |
+| 4 / 5 | none: `cur` on the left (4) / right (5) of the XY line corner 1 → corner 2 | x, y, z as above |
+
+  (−5 at 0x4945c8, −0.5 at 0x4945d0.) Levels use 0–3 (doorways, 140 records) and 6/7 (hatches,
+  28); 4/5 never.
+- Callers: `game_frame` 0x41d4d8 with Kurt's arena, `prev` = 0x5739cc (Kurt's feet of the last
+  frame: `camera_update` 0x4174d0 copies 0x5739c0 there every frame; a teleport 0x41bce4 sets
+  both), `cur` = 0x5739c0, after the scripts and the pending teleport. On a hit: `0x573be8` (sliding)
+  = −15 if > 0, 0x573a68 = the arena left, 0x573a6c = 1, 0x573a0c = new, `BSPShow(new)` (loads it,
+  switches the music to it, first-time aliens). Corridors (`C…`) and arenas are treated alike.
+- Follows Kurt's arena (0x573a0c), not his position: the camera pitch (`camera_update` eases
+  0x573918 to `arena+0x462`, the DTI pitch), the music (`arena_load` of Kurt's arena), triggers
+  0x41bf1c (records of Kurt's arena), Kurt vs objects.
+- `camera_update` also runs it on (Kurt's feet + 3 z → the camera position): when that reaches the
+  second arena, the draw order is swapped (`0x490db4` = 1).
+- Also called by the effects' segment test 0x407e2c (result in `effect+0x1a6`) and by the object
+  move 0x45e810 (objects with `obj+0x14a` bit 3, result in `obj+0x2bc`). 🟡 their effect not checked.
 
 ### The second arena
 
@@ -385,8 +421,8 @@ shown (so behind a door as it opens). Only Kurt's arena and the active second on
 their objects; an arena in neither slot any more stops its objects' loop sounds, which start again
 when it comes back, and Kurt's thrown items there go. Rays (`raycast`) stop only on Kurt's arena
 and the second one; Kurt collides only with his arena and the active second one
-(`Level.set_solid_arenas`). The port picks his arena by its box among the connected ones, not by
-crossing the connections. A door that already links the two arenas is moved into the arena whose
+(`Level.set_solid_arenas`). His arena changes by crossing the connections (`_crossed_arena`),
+and the camera pitch and the music follow it. A door that already links the two arenas is moved into the arena whose
 script asks for it, unless it's in Kurt's or the second arena (`spawn_connector`). Type 4 records (static objects: only the pickups of level 8's `GUNT_9`) are spawned
 with the aliens, with flags 0x2008a0 and 1 health.
 
