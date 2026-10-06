@@ -33,6 +33,9 @@ const BETA_LEVEL_NAMES := {1: "96 Level 1: City", 3: "96 Level 3: Wheel Boss", 6
 ## The page shown, for Esc.
 enum Page { MAIN, QUIT, OTHER }
 
+## The command line skipped the menu (`--level`, …) once: when that game comes back to it (the
+## level is over, Kurt died), it stays instead of reloading the level.
+static var _skipped := false
 
 var fti: MDKFti
 var level_index := 0
@@ -68,7 +71,9 @@ func _ready() -> void:
 		GameState.level = int(args.fall)
 		get_tree().change_scene_to_file.call_deferred("res://game/fall/fall.tscn")
 		return
-	if args.has("level") or args.has("load") or args.has("viewer") or args.has("models") or (args.has("screenshot") and not args.has("menu")):
+	var skip: bool = args.has("level") or args.has("load") or args.has("viewer") or args.has("models") or (args.has("screenshot") and not args.has("menu"))
+	if skip and not _skipped:
+		_skipped = true
 		get_tree().change_scene_to_file.call_deferred("res://game/main.tscn")
 		return
 
