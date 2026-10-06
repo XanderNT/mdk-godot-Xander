@@ -38,7 +38,8 @@ statistics and the end videos. It's being played through and its bugs fixed; the
 
 Recent work: the enhanced graphics mode (Options → Graphics), the original menus, the `XD2` and
 `XE` rides, the gore option, animated delta textures (`M_COMM`), and fixes from playtesting
-(the chute, sniper screen, flickering wall details, walker riding).
+(the chute, sniper screen, flickering wall details, walker riding, LEVEL4's lift to `MEAT_7`,
+objects colliding only with their own arena, Kurt dying when he falls out of an arena).
 
 ## Screenshots
 

@@ -115,6 +115,11 @@ walkers). 0x1, 0x2 and 0x10 are cleared at the start of each velocity step.
   with factor −1.8 along the normal when bouncing), the hit triangle is kept (`obj+0x2b0`, used by
   conveyors), and triangle-group hit scripts may run (0x40d560). Without flag 0x4 objects move
   freely, only clamped to an optional box (`obj+0x27c`…`obj+0x290`).
+  Only the object's own arena counts: LEVEL5's key falls through the overlapping CMUSE_4 onto
+  MUSE_5's floor. The sweep never pushes a box out of an overlap: a pose growing into a wall
+  doesn't move the object (LEVEL7's `SW_H150`). The port uses `body_test_motion` with the other
+  arenas' bodies excluded (`MDKLevel.get_other_bodies`) and keeps only the vertical part of its
+  overlap recovery (`tests/own_arena_test.gd`, `tests/runner_pickup_test.gd`).
 - Objects more than 200 units below their arena's lowest point (`arena+0x44e`) die (0x43d884): the
   death script runs (and the object is put back 150 units below the floor, without gravity), or the
   object is removed.

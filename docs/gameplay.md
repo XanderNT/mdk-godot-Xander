@@ -71,6 +71,9 @@ Speeds per tick (× 30 for per second):
   Kurt's frames (below, "The chute's frames"); the port: `Kurt._show_chute`, test
   `tests/chute_test.sh` (`--jump` holds the key).
 - Landing faster than 100 u/s is a hard landing (probably damage *(inferred)*).
+- 50 units below his arena's lowest point (`arena+0x44e`) Kurt dies: health 0, vertical speed 0,
+  the death plays as on a floor (see [bsp.md](bsp.md#floor-contact-damp_gravity-0x469efc); port:
+  `MDKScriptRuntime._check_fall_out`, `tests/fall_out_test.gd`).
 - The floor is found by the downward collision sweep (no separate height query). Moving platforms
   are found by a ray from z + 3 to z − 3 (`damp_platform_floor`).
 - Ledge grab (`damp_ledge_grab` 0x469868, after `damp_gravity`) ✅: while falling (vertical speed
@@ -2860,7 +2863,8 @@ camera_clearance(C):
 
 All lines ✅ except the names of the object fields (meaning taken from engine.md "Flags"; flag
 0x1000000 = "solid for thrown items", the same set the items stop on ✅ / meaning ❓). Part
-visibility (`obj+0x2c8`) is not checked ✅.
+visibility (`obj+0x2c8`) is not checked ✅. A part the head is in (0x45f588 returns 2) doesn't clip
+the view: Kurt teleported into a door isn't shoved through it (`tests/doorway_teleport_test.gd`).
 
 #### Answers
 
