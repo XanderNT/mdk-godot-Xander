@@ -179,7 +179,12 @@ func _push_from_objects(head: Vector3, camera: Vector3) -> void:
 		if not obj.flags & VIEW_BLOCKING or obj.flags & VIEW_IGNORED:
 			continue
 		for part_bounds in obj.get_part_bounds():
-			var crossing: Variant = scripts.get_world_bounds(obj, part_bounds).intersects_segment(from, end)
+			var box: AABB = scripts.get_world_bounds(obj, part_bounds)
+			# A part the head is in doesn't count (0x45f588 returns 2), e.g. a door Kurt teleported into.
+			if box.has_point(from):
+				continue
+
+			var crossing: Variant = box.intersects_segment(from, end)
 			if crossing != null:
 				end = crossing
 	if end == to:
