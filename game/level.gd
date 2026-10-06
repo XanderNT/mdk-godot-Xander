@@ -68,7 +68,8 @@ var _arenas := {}
 ## seen unless a script teleports Kurt there. Some overlap the playable arenas (level 7's `DANT_8`,
 ## flat colours and glass, covers the start of `DANT_1`), so they're hidden and not solid.
 var _unreachable := {}
-## The arenas each arena connects to: DTI records of type 6 come in pairs with the same id.
+## The arena at the other end of each connection: DTI records of type 6 come in pairs with the
+## same id. [arena, id] → arena.
 var _connections := {}
 var _resolvers := {}
 ## Triangles torn off at the end of the level, per arena (triangle → true).
@@ -351,27 +352,26 @@ func enter_arena(arena_name: String) -> void:
 		root.process_mode = Node.PROCESS_MODE_INHERIT
 
 
-## Pairs the connection records (type 6) of the arenas by their id.
+## Pairs the connection records (type 6) of the arenas by their id (0x41c22c).
 func _find_connections() -> void:
 	var by_id := {}
 	for entry in dti.arenas:
-		_connections[entry.name] = []
 		for record: Dictionary in entry.records:
 			if record.type != CONNECTION:
 				continue
 			if not by_id.has(record.id):
 				by_id[record.id] = []
 			by_id[record.id].push_back(entry.name)
-	for names: Array in by_id.values():
-		for a: String in names:
-			for b: String in names:
-				if a != b and b not in _connections[a]:
-					_connections[a].push_back(b)
+	for id: int in by_id:
+		for a: String in by_id[id]:
+			for b: String in by_id[id]:
+				if a != b:
+					_connections[[a, id]] = b
 
 
-## Whether a connection leads from one arena to the other.
-func connects(from: String, to: String) -> bool:
-	return to in _connections.get(from, [])
+## The arena at the other end of an arena's connection record, or an empty string.
+func get_connection(arena_name: String, id: int) -> String:
+	return _connections.get([arena_name, id], "")
 
 
 ## Draws only these arenas (Kurt's and the second, see `MDKScriptRuntime`); the others stay solid.
@@ -457,9 +457,9 @@ func get_arena_at(position: Vector3) -> String:
 	return best
 
 
-## Returns the camera pitch (degrees, positive looks down) of the arena containing `position`.
-func get_camera_pitch(position: Vector3) -> float:
-	return arena_pitch.get(get_arena_at(position), 4.0)
+## Returns the camera pitch (degrees, positive looks down) of an arena.
+func get_camera_pitch(arena_name: String) -> float:
+	return arena_pitch.get(arena_name, 4.0)
 
 
 ## Returns a sound by name (loaded on first use), or `null`.

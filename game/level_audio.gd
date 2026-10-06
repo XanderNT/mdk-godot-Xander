@@ -14,6 +14,8 @@ const CORRIDOR := "CORRIDOR"
 
 @export var level: Level
 @export var target: Node3D
+## Kurt's arena comes from the scripts when they run (crossing connections), else from his position.
+var scripts: MDKScriptRuntime
 
 var arena := ""
 ## The playing track and the one fading out, with their volumes (0–0x7FFF).
@@ -36,7 +38,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not level.cmi or not target:
 		return
-	var current_arena := level.get_arena_at(target.global_position)
+	var current_arena := scripts.current_arena if scripts else level.get_arena_at(target.global_position)
 	if not current_arena.is_empty() and current_arena != arena:
 		arena = current_arena
 		_switch(_music_of(arena))
