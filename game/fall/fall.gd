@@ -821,6 +821,9 @@ func _update_pickups(dt: float, ticks: int) -> void:
 		if pickup.chute:
 			pickup.chute.basis = basis
 			pickup.chute.position = MDKMeshBuilder.to_godot(pickup.position + Vector3(0, 0, 2))
+		# Only under its chute (0x41275c): dropped above the camera, it would go at once.
+		if not pickup.chute:
+			continue
 		if not _dying and _time <= STEER_TIME and _crosses_kurt(previous, pickup.position):
 			_play("P_COLL")
 			_play(["K_COLL1", "K_COLL2"][randi() & 1])
