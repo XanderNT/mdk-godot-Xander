@@ -705,14 +705,21 @@ func _sweep(obj: MDKObject, motion: Vector3) -> Variant:
 		_motion_parameters.from = Transform3D(Basis(), MDKMeshBuilder.to_godot(obj.mdk_position + center))
 		_motion_parameters.motion = MDKMeshBuilder.to_godot(remaining)
 		var hit := PhysicsServer3D.body_test_motion(_probe, _motion_parameters, _motion_result)
-		obj.mdk_position += MDKScriptRuntime.to_mdk(_motion_result.get_travel())
 		if not hit:
+			obj.mdk_position += remaining
 			break
+
+		# The overlap recovery may lift the box off a floor, but not push it sideways: the original's
+		# sweep doesn't (LEVEL7's SW_H150 crept towards Kurt as its idle pose grew).
+		var safe := _motion_result.get_collision_safe_fraction()
+		var along := remaining * safe
+		var travel := MDKScriptRuntime.to_mdk(_motion_result.get_travel())
+		obj.mdk_position += Vector3(along.x, along.y, travel.z)
 		var hit_normal := MDKScriptRuntime.to_mdk(_motion_result.get_collision_normal())
 		if normal == null:
 			normal = hit_normal
 		# Slide along what was hit.
-		remaining = MDKScriptRuntime.to_mdk(_motion_result.get_remainder())
+		remaining *= 1.0 - safe
 		remaining -= hit_normal * remaining.dot(hit_normal)
 		if remaining.length_squared() < 1e-6:
 			break
