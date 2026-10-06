@@ -89,7 +89,11 @@ func _parse_world(bytes: PackedByteArray, base: int) -> void:
 
 	bsp_node_count = r.u32()
 	r.skip(bsp_node_count * 44)
+	read_triangles(r)
 
+
+## Reads the triangles and the vertices of a world section (also the 1996 demo's, `MDKBeta`).
+func read_triangles(r: BinReader) -> void:
 	var triangle_count := r.u32()
 	triangle_indices.resize(triangle_count * 3)
 	triangle_materials.resize(triangle_count)

@@ -633,6 +633,9 @@ func _fly_projectile(obj: MDKObject) -> void:
 	if touch != null:
 		obj.contact_flags |= MDKObject.CONTACT_TOUCHED_KURT
 		obj.mdk_position = touch
+		if obj.touch_damage > 0:
+			runtime.hurt_kurt(obj.touch_damage)
+			runtime.kill(obj)
 	else:
 		obj.contact_flags &= ~MDKObject.CONTACT_TOUCHED_KURT
 

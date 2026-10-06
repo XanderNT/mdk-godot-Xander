@@ -69,6 +69,8 @@ Open the project in Godot 4.7 and run it. Command line options (after `--`):
 
 - `--level=N`: start `TRAVERSE/LEVELn` (3–8) directly, skipping the menu. The levels are played
   in the order 7, 6, 3, 4, 8, 5.
+- `--level=961`, `--level=963`, `--level=966`: the three levels of the beta demo of August 1996,
+  if you have it (see [docs/beta96.md](docs/beta96.md)); the main menu's "Beta Levels" page starts them too.
 - `--viewer`: free-camera level viewer (`--camera=x,y,z`, `--look-at=x,y,z`).
 - `--models`: model viewer (`--arena=NAME`).
 - `--stats=N`, `--briefing=N`, `--fall=N`, `--stream=N`: the screens after LEVELn, its briefing,

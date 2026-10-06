@@ -13,6 +13,8 @@ var root_motion := PackedVector3Array()
 var reference_points: Array[PackedVector3Array] = []
 
 var _bytes: PackedByteArray
+## The 1996 demo's layout (`parse_beta`).
+var _beta := false
 ## Lowercase track name to the track's offset.
 var _tracks := {}
 
@@ -32,6 +34,46 @@ static func parse(p_name: String, bytes: PackedByteArray, offset: int) -> MDKMod
 	animation.root_motion.resize(animation.frame_count)
 	for f in animation.frame_count:
 		animation.root_motion[f] = r.vec3()
+	for i in r.u32():
+		var points := PackedVector3Array()
+		points.resize(animation.frame_count)
+		for f in animation.frame_count:
+			points[f] = r.vec3()
+		animation.reference_points.push_back(points)
+	return animation
+
+
+## Parses an animation of the 1996 demo (`MDKBeta`), kept in `LEVELn.CMI`:
+##
+## ```
+## +0   u32 track count T
+## +4   u32 frame count F
+## +8   u32 track offset[T]         relative to the animation
+##      f32 root motion[F][3]
+##      f32 bounds[F][6]            the model's box in each frame
+##      u32 reference point count R, f32[R][F][3]
+## track: char[12] part name, u32 vertex count, f32 scale, f32 base[n][3],
+##        then for each of the other F − 1 frames s8 delta[n][3]
+## ```
+##
+## There's no speed, the delta records of every frame follow each other without frame numbers,
+## and no track uses matrices.
+static func parse_beta(p_name: String, bytes: PackedByteArray, offset: int) -> MDKModelAnimation:
+	var animation := MDKModelAnimation.new()
+	animation.name = p_name
+	animation._bytes = bytes
+	animation._beta = true
+	var r := BinReader.new(bytes, offset)
+	var track_count := r.u32()
+	animation.frame_count = r.u32()
+	for i in track_count:
+		var track_offset := offset + r.u32()
+		var track_name := bytes.slice(track_offset, track_offset + 12).get_string_from_ascii()
+		animation._tracks[track_name.to_lower()] = track_offset
+	animation.root_motion.resize(animation.frame_count)
+	for f in animation.frame_count:
+		animation.root_motion[f] = r.vec3()
+	r.skip(animation.frame_count * 24)
 	for i in r.u32():
 		var points := PackedVector3Array()
 		points.resize(animation.frame_count)
@@ -64,7 +106,9 @@ func bake(model: MDKModel) -> Array:
 func _decode_track(offset: int, vertex_count: int) -> Array[PackedVector3Array]:
 	var frames: Array[PackedVector3Array] = []
 	var scale_bits := _bytes.decode_u32(offset + 16)
-	if scale_bits & 0x7FFFFFFF == 0:
+	if _beta:
+		_decode_beta_track(offset, vertex_count, _bytes.decode_float(offset + 16), frames)
+	elif scale_bits & 0x7FFFFFFF == 0:
 		_decode_matrix_track(offset, vertex_count, frames)
 	else:
 		_decode_delta_track(offset, vertex_count, _bytes.decode_float(offset + 16), frames)
@@ -89,6 +133,23 @@ func _decode_delta_track(offset: int, vertex_count: int, scale: float, frames: A
 				var dz := _signed_byte(r.u8())
 				vertices[v] += Vector3(dx, dy, dz) * scale
 			next_record = r.s16()
+		frames.push_back(vertices.duplicate())
+
+
+## The 1996 demo's tracks: base vertices, then `s8 delta[n][3]` for every following frame.
+func _decode_beta_track(offset: int, vertex_count: int, scale: float, frames: Array[PackedVector3Array]) -> void:
+	var r := BinReader.new(_bytes, offset + 20)
+	var vertices := PackedVector3Array()
+	vertices.resize(vertex_count)
+	for v in vertex_count:
+		vertices[v] = r.vec3()
+	frames.push_back(vertices.duplicate())
+	for f in range(1, frame_count):
+		for v in vertex_count:
+			var dx := _signed_byte(r.u8())
+			var dy := _signed_byte(r.u8())
+			var dz := _signed_byte(r.u8())
+			vertices[v] += Vector3(dx, dy, dz) * scale
 		frames.push_back(vertices.duplicate())
 
 

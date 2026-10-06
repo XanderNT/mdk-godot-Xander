@@ -73,21 +73,34 @@ var _connections := {}
 var _resolvers := {}
 ## Triangles torn off at the end of the level, per arena (triangle → true).
 var _hidden_triangles := {}
+## Arena to the body of its triangles that only stop Kurt (`_build_clip`), and their RIDs.
+var _clip_bodies := {}
+var clip_rids: Array[RID] = []
 
 
 ## Loads level `p_number` (3–8) and builds its arenas.
 func load_level(p_number: int) -> void:
 	number = p_number
 	var dir := "TRAVERSE/LEVEL%d/" % number
-	dti = MDKDti.load_file(MDKData.path(dir + "LEVEL%d.DTI" % number))
-	mto = MDKMto.load_file(MDKData.path(dir + "LEVEL%dO.MTO" % number))
-	level_textures = MDKTextureArchive.load_file(MDKData.path(dir + "LEVEL%dS.MTI" % number))
-	cmi = MDKCmi.load_file(MDKData.path(dir + "LEVEL%d.CMI" % number))
+	var overlays: MDKSni = null
+	# The 1996 demo's levels (961, 963, 966) are read into the same objects, see `MDKBeta`.
+	var beta := MDKBeta.level_of(number) if MDKBeta.is_beta(number) else 0
+	if beta:
+		dti = MDKBeta.load_dti(beta)
+		mto = MDKBeta.load_mto(beta)
+		level_textures = MDKBeta.load_textures(beta)
+		cmi = MDKBeta.load_cmi(beta)
+		sound_archives = MDKBeta.load_sounds(beta)
+	else:
+		dti = MDKDti.load_file(MDKData.path(dir + "LEVEL%d.DTI" % number))
+		mto = MDKMto.load_file(MDKData.path(dir + "LEVEL%dO.MTO" % number))
+		level_textures = MDKTextureArchive.load_file(MDKData.path(dir + "LEVEL%dS.MTI" % number))
+		cmi = MDKCmi.load_file(MDKData.path(dir + "LEVEL%d.CMI" % number))
+		overlays = MDKSni.load_file(MDKData.path(dir + "LEVEL%dO.SNI" % number))
+		sound_archives = [MDKSni.load_file(MDKData.path("TRAVERSE/TRAVERSE.SNI")),
+				MDKSni.load_file(MDKData.path(dir + "LEVEL%dS.SNI" % number)), overlays]
 	specials = MDKSpecialMaterials.new(dti)
 	look = MDKMeshBuilder.Look.ENHANCED if Settings.enhanced_graphics else MDKMeshBuilder.Look.ORIGINAL
-	var overlays := MDKSni.load_file(MDKData.path(dir + "LEVEL%dO.SNI" % number))
-	sound_archives = [MDKSni.load_file(MDKData.path("TRAVERSE/TRAVERSE.SNI")),
-			MDKSni.load_file(MDKData.path(dir + "LEVEL%dS.SNI" % number)), overlays]
 
 	var all_archives: Array[MDKTextureArchive] = []
 	for arena_name: String in mto.get_arena_names():
@@ -102,8 +115,10 @@ func load_level(p_number: int) -> void:
 	var arenas: Array[MDKArena] = []
 	for arena_name: String in mto.get_arena_names():
 		arenas.push_back(mto.get_arena(arena_name))
+	if beta:
+		arenas.append_array(MDKBeta.load_corridors(beta))
 	# Corridors between arenas (`CHMO_1` follows `HMO_1`) are stored in `LEVELnO.SNI`.
-	for entry_name: String in overlays.entries:
+	for entry_name: String in overlays.entries if overlays else {}:
 		if not overlays.is_sound(entry_name):
 			var corridor := MDKArena.parse_world(entry_name, overlays.bytes, overlays.entries[entry_name][0])
 			# Empty corridors are a placeholder quad with the `NONE` material.
@@ -128,7 +143,10 @@ func load_level(p_number: int) -> void:
 		root.name = arena_name
 		add_child(root)
 		var groups := {}
+		var clip := MDKBeta.get_clip_triangles(arena) if beta else PackedInt32Array()
 		for tri in arena.triangle_flags.size():
+			if clip.has(tri):
+				continue
 			var group_number := (arena.triangle_flags[tri] >> 24) & 0xFF
 			if not groups.has(group_number):
 				groups[group_number] = TriangleGroup.new()
@@ -139,6 +157,8 @@ func load_level(p_number: int) -> void:
 			root.visible = false
 			root.process_mode = Node.PROCESS_MODE_DISABLED
 		arena_groups[arena_name] = groups
+		if not clip.is_empty():
+			_build_clip(arena, root, clip)
 		if not resolver.missing.is_empty():
 			push_warning("%s: materials not found: %s" % [arena_name, ", ".join(resolver.missing)])
 		triangle_count += arena.triangle_materials.size()
@@ -168,6 +188,22 @@ func _build_group(arena: MDKArena, root: Node3D, group_number: int, group: Trian
 	group.shape.shape = MDKMeshBuilder.build_arena_collision(arena, group.triangles)
 	body.add_child(group.shape)
 	root.add_child(body)
+
+
+## The 1996 demo's triangles with flag 2 (`MDKBeta.get_clip_triangles`): not drawn, and skipped
+## by its triangle tests: they stop Kurt and what he feels his way with (walls ahead, ledges, the
+## camera), but not the scripts' rays (shots, lines of sight), which leave out `clip_rids`.
+func _build_clip(arena: MDKArena, root: Node3D, triangles: PackedInt32Array) -> void:
+	var body := StaticBody3D.new()
+	body.name = "Clip"
+	body.set_meta(&"arena", arena.name)
+	body.collision_layer = RAY_LAYER | KURT_LAYER
+	var shape := CollisionShape3D.new()
+	shape.shape = MDKMeshBuilder.build_arena_collision(arena, triangles)
+	body.add_child(shape)
+	root.add_child(body)
+	_clip_bodies[arena.name] = body
+	clip_rids.push_back(body.get_rid())
 
 
 ## Changes the flags of a triangle group (`group_set_state` op): 0 hides it and makes it not solid,
@@ -352,6 +388,8 @@ func set_solid_arenas(arena_names: Array[String]) -> void:
 		var layer := RAY_LAYER | (KURT_LAYER if arena_name in arena_names else 0)
 		for group: TriangleGroup in arena_groups[arena_name].values():
 			(group.shape.get_parent() as StaticBody3D).collision_layer = layer
+		if _clip_bodies.has(arena_name):
+			_clip_bodies[arena_name].collision_layer = layer
 
 
 ## The enhanced look: a sun with shadows, white light all around, ambient occlusion, glow on

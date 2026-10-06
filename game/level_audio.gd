@@ -21,12 +21,16 @@ var _current := AudioStreamPlayer.new()
 var _fading := AudioStreamPlayer.new()
 var _current_volume := 0.0
 var _fading_volume := 0.0
+## The arena's ambient loop, which the 1996 demo plays under the music (`MDKCmi.arena_ambience`).
+var _ambience := AudioStreamPlayer.new()
 
 
 func _ready() -> void:
 	for player: AudioStreamPlayer in [_current, _fading]:
 		player.bus = &"Music"
 		add_child(player)
+	_ambience.bus = &"Effects"
+	add_child(_ambience)
 
 
 func _process(delta: float) -> void:
@@ -36,6 +40,8 @@ func _process(delta: float) -> void:
 	if not current_arena.is_empty() and current_arena != arena:
 		arena = current_arena
 		_switch(_music_of(arena))
+		if level.cmi.beta:
+			_play_ambience(level.get_sound(level.cmi.arena_ambience.get(arena, "")))
 	_fade(delta)
 
 
@@ -69,6 +75,17 @@ func _switch(music: AudioStream) -> void:
 	_current_volume = 0.0
 	if music:
 		_current.play()
+
+
+func _play_ambience(sound: AudioStreamWAV) -> void:
+	if sound == _ambience.stream:
+		return
+	_ambience.stream = sound
+	if sound:
+		_ambience.volume_db = SoundMixer.to_db(sound.get_meta(&"volume", SoundMixer.FULL_VOLUME))
+		_ambience.play()
+	else:
+		_ambience.stop()
 
 
 func _fade(delta: float) -> void:

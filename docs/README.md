@@ -21,6 +21,7 @@ Legend used in the documents: ✅ fully understood and implemented, 🟡 partly 
 | [animated_textures.md](animated_textures.md) | Animated textures: the loader, full-frame and delta-coded (`M_COMM`) kinds, how scripts drive them |
 | [practice_room.md](practice_room.md) | Level 7's practice room: geometry, who stands where, and two investigated bugs |
 | [sound.md](sound.md) | The sound system: samples and voices, the mixer (volume in dB, distance law, Doppler, scope listening), the arena music and its fades, every sound the code plays |
+| [beta96.md](beta96.md) | The beta demo of August 1996 and its three levels, playable as extras: its file formats, its earlier script bytecode, how the port runs them |
 | [roadmap.md](roadmap.md) | What the port does and what's next |
 
 ## Tools

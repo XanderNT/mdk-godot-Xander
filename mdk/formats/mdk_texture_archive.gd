@@ -19,12 +19,14 @@ var textures := {}
 var colors := {}
 
 
-static func parse(bytes: PackedByteArray, base: int) -> MDKTextureArchive:
+## `header` is the size of the name and size before the count: 16, or 0 in the 1996 demo's
+## archives (`MDKBeta`), whose names are in lower case.
+static func parse(bytes: PackedByteArray, base: int, header := 16) -> MDKTextureArchive:
 	var archive := MDKTextureArchive.new()
-	var r := BinReader.new(bytes, base + 16)
+	var r := BinReader.new(bytes, base + header)
 	var count := r.u32()
 	for i in count:
-		var entry_name := r.name(8)
+		var entry_name := r.name(8).to_upper()
 		var kind := r.u32()
 		var value := r.u32()
 		var _unknown := r.f32()

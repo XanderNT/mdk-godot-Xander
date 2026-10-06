@@ -18,16 +18,18 @@ var _sounds := {}
 var _animations := {}
 
 
-static func load_file(path: String) -> MDKSni:
+## `header` is where the entry count is: after the common header, or 4 in the 1996 demo's files
+## (`MDKBeta`), whose names are in lower case.
+static func load_file(path: String, header := 0x14) -> MDKSni:
 	var sni := MDKSni.new()
 	sni.bytes = FileAccess.get_file_as_bytes(path)
 	if sni.bytes.is_empty():
 		push_error("Couldn't read %s" % path)
 		return null
-	var r := BinReader.new(sni.bytes, 0x14)
+	var r := BinReader.new(sni.bytes, header)
 	var count := r.u32()
 	for i in count:
-		var entry_name := r.name(12)
+		var entry_name := r.name(12).to_upper()
 		var flags := r.u16()
 		var volume := r.u16()
 		var offset := 4 + r.u32()
