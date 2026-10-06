@@ -802,10 +802,18 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 				obj.flags |= MDKObject.FLAG_PATH_SPEED_BY_KURT
 			else:
 				obj.flags &= ~MDKObject.FLAG_PATH_SPEED_BY_KURT
-		173:  # teleport_player_keep: to another arena keeping the place, or by an offset
-			if o[0].is_empty():
-				var offset := Vector3(o[2], o[3], o[4])
-				runtime.teleport_kurt("", runtime.kurt_position + offset, runtime.kurt_yaw + o[5])
+		173:  # teleport_player_keep: to another arena keeping the place, or by an offset (0x454556)
+			# [arena], or ["", arena, dx, dy, dz, dyaw]: LEVEL4's CMEAT_6 lifts Kurt into MEAT_7.
+			var keep: Array = o[0]
+			var shifted: bool = keep[0].is_empty()
+			var offset := Vector3(keep[2], keep[3], keep[4]) if shifted else Vector3.ZERO
+			var turn: float = keep[5] if shifted else 0.0
+			var arena: String = keep[1] if shifted else keep[0]
+			runtime.teleport_kurt(arena, runtime.kurt_position + offset, runtime.kurt_yaw + turn)
+			obj.restart = 0
+			obj.gosub_returns.clear()
+			obj.gosub_restarts.clear()
+			return YIELD
 		103:  # if_kurt_in_box: each axis between its min and max (corners given backwards never hold)
 			var kurt := runtime.kurt_position
 			var inside := true
