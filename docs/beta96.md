@@ -16,15 +16,32 @@ that image). Legend: ✅ verified by loading and running the levels, 🟡 partly
 
 ## Running
 
-The demo isn't part of the port. Unpack it and either set `MDK_BETA_DIR` to its folder (the one
-with `TRAVERSE`), name it as `beta` in `mdk_paths.cfg` (see the README), or name the folder `BETA96` or `MDK (1996-08-06) (beta demo)` and put it in or
-next to the retail game's folder or the project's.
+The demo isn't part of the port: you need your own copy, unpacked, besides the retail game.
 
-- `--level=961`, `--level=963`, `--level=966` start a level directly.
-- The main menu has a "Beta Levels" page when the demo is found. Its levels start at once: the
-  demo has no briefing, fall or stream.
-- The retail game is still needed: the menus, the fonts and the sprites the demo lacks come from
-  it. Sounds come from the demo's archives only, so sounds the demo doesn't have stay silent.
+1. Tell the port where the demo is (the folder with `TRAVERSE` and `MDKDEMO.EXE`), in one of
+   these ways:
+   - name it as `beta` in `mdk_paths.cfg`, next to `project.godot` (the game's folder is `mdk`):
+
+         [paths]
+         mdk="C:/GOG Games/MDK"
+         beta="C:/Games/MDK (1996-08-06) (beta demo)"
+
+   - set `MDK_BETA_DIR` to it;
+   - or name the folder `BETA96` or `MDK (1996-08-06) (beta demo)` and put it in or next to the
+     retail game's folder or the project's.
+2. Start a level: the main menu has a "Beta Levels" page when the demo is found, and
+   `--level=961`, `--level=963` and `--level=966` start one directly. The levels start at once:
+   the demo has no briefing, fall or stream.
+
+Keys of these levels only (see [Kurt](#kurt-)):
+
+| Key | Does |
+| --- | --- |
+| Z, C | Roll left, right |
+| T or Alt + a digit | The demo's teleports. The city needs them: T + 4 is the only way to the top of `ARENA_4`, T + 0 is the top of the tower in `ARENA10` |
+
+The retail game is still needed: the menus, the fonts and the sprites the demo lacks come from
+it. Sounds come from the demo's archives only, so sounds the demo doesn't have stay silent.
 
 ## How the port runs it
 
