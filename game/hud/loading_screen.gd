@@ -21,6 +21,10 @@ var _bar_frame := Color.WHITE
 func setup(level_number: int, fti: MDKFti) -> void:
 	layer = 20
 	var bytes := FileAccess.get_file_as_bytes(MDKData.path("MISC/LOAD_%d.LBB" % level_number))
+	# The 1996 demo's screens have the same layout (`DEMO/SCREENn.LBB`, in the demo's order).
+	if MDKBeta.is_beta(level_number):
+		var screen := MDKBeta.LEVELS.find(MDKBeta.level_of(level_number)) + 1
+		bytes = FileAccess.get_file_as_bytes(MDKBeta.path("DEMO/SCREEN%d.LBB" % screen))
 	if bytes.size() > 772:
 		var palette := MDKPalette.from_rgb(bytes.slice(0, 768))
 		var image := MDKTexture.parse("LOAD", bytes, 768)

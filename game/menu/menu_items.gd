@@ -172,6 +172,8 @@ func show_options(on_back: Callable) -> void:
 			func(_step: int) -> void: Settings.invert_mouse = not Settings.invert_mouse)
 	add_option(func() -> String: return "Fullscreen: %s" % _on_off(Settings.fullscreen),
 			func(_step: int) -> void: Settings.fullscreen = not Settings.fullscreen)
+	add_option(func() -> String: return "Anti-aliasing: %s" % Settings.ANTIALIASING_NAMES[Settings.antialiasing],
+			func(step: int) -> void: Settings.antialiasing = wrapi(Settings.antialiasing + step, 0, Settings.ANTIALIASING_NAMES.size()))
 	add_option(func() -> String: return "Difficulty: %s" % ["Easy", "Normal", "Hard"][Settings.difficulty],
 			func(step: int) -> void: Settings.difficulty = wrapi(Settings.difficulty + step, 0, 3))
 	add_option(func() -> String: return "Graphics: %s" % ("Enhanced" if Settings.enhanced_graphics else "Original"),

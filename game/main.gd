@@ -108,6 +108,10 @@ func _ready() -> void:
 		var animation := level.get_sprite_animation(animation_name)
 		if animation:
 			sprites.add_animation(animation_name, animation)
+	# The 1996 demo's levels show its Kurt and its HUD.
+	if MDKBeta.is_beta(level.number):
+		MDKBeta.add_sprites(sprites)
+		kurt.beta_moves = true
 	var mixer := SoundMixer.new()
 	mixer.name = "SoundMixer"
 	mixer.get_sound = level.get_sound
@@ -228,6 +232,17 @@ func _ready() -> void:
 		if victim:
 			scripts.kill(victim)
 			await get_tree().create_timer(KILL_SETTLE).timeout
+	if args.has("key"):
+		# Holds a key by its name (`--key=Z`, `--key=Alt+4`), for moves that read keys.
+		var key := InputEventKey.new()
+		var code := OS.find_keycode_from_string(args.key)
+		key.physical_keycode = code & KEY_CODE_MASK
+		key.keycode = key.physical_keycode
+		key.alt_pressed = code & KEY_MASK_ALT != 0
+		key.pressed = true
+		Input.parse_input_event(key)
+	if args.has("beta-teleport"):
+		_beta_teleport(int(args["beta-teleport"]))
 	if args.has("jump"):
 		Input.action_press(&"jump")
 	if args.has("use"):
@@ -328,8 +343,13 @@ func _on_kurt_died() -> void:
 	GameState.level = level.number
 	GameState.deaths += 1
 	GameState.strike_used = scripts.air_strike.used_up if scripts.air_strike else false
-	GameState.save_game(GameState.LAST_GAME)
+	if not MDKBeta.is_beta(level.number):
+		GameState.save_game(GameState.LAST_GAME)
 	get_tree().change_scene_to_file("res://game/menu/main_menu.tscn")
+
+
+## Held with a digit for the 1996 demo's teleports, like Alt.
+const TELEPORT_KEY := KEY_T
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -339,6 +359,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		_ask_snapshot()
 	if event is InputEventKey and event.pressed and not event.echo:
 		_type(event.keycode)
+		if MDKBeta.is_beta(level.number):
+			# The key's place on the keyboard, whatever the layout, or the keypad.
+			var digit := -1
+			if event.physical_keycode >= KEY_0 and event.physical_keycode <= KEY_9:
+				digit = event.physical_keycode - KEY_0
+			elif event.keycode >= KEY_KP_0 and event.keycode <= KEY_KP_9:
+				digit = event.keycode - KEY_KP_0
+			if digit >= 0 and (event.alt_pressed or Input.is_key_pressed(KEY_ALT) or Input.is_physical_key_pressed(TELEPORT_KEY)):
+				_beta_teleport(digit)
+
+
+## The 1996 demo's teleports (`MDKBeta.load_teleports`), on a digit while Alt or T is held: the
+## digits alone pick items in the port. The city has no other way up to the top of `ARENA_4`: the demo has no fans
+## or updrafts yet.
+func _beta_teleport(index: int) -> void:
+	# The lines of this level's arenas, in order (the file ends with level 6's own "tel0").
+	var teleports := MDKBeta.load_teleports().filter(func(teleport: Array) -> bool:
+		return level.arena_bounds.has(teleport[0]))
+	if index < teleports.size() and scripts.vm:
+		scripts.teleport_kurt(teleports[index][0], teleports[index][1], rad_to_deg(kurt.yaw) + 90.0)
 
 
 ## Letters typed in a level: `TOOSCARYFORME` turns gore on or off (not saved), `SEETHEWHOLEGAME`

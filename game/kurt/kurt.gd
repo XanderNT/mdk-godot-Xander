@@ -120,7 +120,22 @@ const CLIP_DECAY := 4.0
 enum Walk { NORMAL, RIDING }
 
 enum State { STILL, IDLE, RUN, SIDE, TURN, JUMP, RUN_JUMP, FALL, CHUTE, LAND, SHOT, RUN_FIRE, DEAD, THROW, KNOCKED,
-		SLIP, SLIDE, SLIDE_FAST, SLIDE_BRAKE, HANG }
+		SLIP, SLIDE, SLIDE_FAST, SLIDE_BRAKE, HANG, ROLL_LEFT, ROLL_RIGHT, HELMET_ON, HELMET_OFF }
+
+# The 1996 demo's moves (`beta_moves`, docs/beta96.md, "Kurt"). `MDKDEMO.EXE` draws them in
+# `damp_animate` 0x36cf4: states 701 and 702 roll Kurt to his left or right, 703 puts the sniper
+# helmet on and 900 takes it off.
+## A roll plays `K_ROLLL` or `K_ROLLR` once, a frame per tick; Kurt moves sideways at 8 × 0.05
+## units per tick and turns 90° the other way over the animation, a quarter circle around what he
+## faces.
+const ROLL_SPEED := 8.0 * 0.05 * TICKS
+const ROLL_TURN := 90.0
+## Nothing in the demo starts a roll (no code asks for states 701 and 702), so the keys are the
+## port's own.
+const ROLL_LEFT_KEY := KEY_Z
+const ROLL_RIGHT_KEY := KEY_C
+## Walking backwards shows `K_BCKUP`, a file of the demo its executable never loads ❓.
+const BACK_UP_ANIMATION := "K_BCKUP"
 
 # Ledge grab (`damp_ledge_grab` 0x469868, climbing in `damp_animate` state 800). See
 # docs/gameplay.md ("Ledge grab").
@@ -164,6 +179,9 @@ const MUZZLE_OFFSETS := {
 	State.CHUTE: Vector2i(20, 0),
 }
 
+## The states of the 1996 demo's moves, which play their animation through (`_update_beta_move`).
+const BETA_STATES := [State.ROLL_LEFT, State.ROLL_RIGHT, State.HELMET_ON, State.HELMET_OFF]
+
 ## Sprite animation used by each state, and whether it loops.
 const STATE_ANIMATIONS := {
 	State.STILL: ["K_STILL", false],
@@ -186,6 +204,10 @@ const STATE_ANIMATIONS := {
 	State.SLIDE_FAST: ["K_FSLIDE", true],
 	State.SLIDE_BRAKE: ["K_BSLIDE", true],
 	State.HANG: ["K_HANG", false],
+	State.ROLL_LEFT: ["K_ROLLL", false],
+	State.ROLL_RIGHT: ["K_ROLLR", false],
+	State.HELMET_ON: ["K_HELM", false],
+	State.HELMET_OFF: ["K_HELM", false],
 }
 
 ## Yaw in radians (0 faces -Z).
@@ -194,6 +216,8 @@ var yaw := 0.0
 var forward_speed := 0.0
 var strafe_speed := 0.0
 var turn_speed := 0.0
+## The 1996 demo's moves are on (its levels): rolls, the helmet going on and off, backing up.
+var beta_moves := false
 var state := State.STILL
 var state_time := 0.0
 ## Animation position in frames.
@@ -441,9 +465,22 @@ func _physics_process(delta: float) -> void:
 	_update_chute_sound()
 	var turbo := Input.is_action_pressed(&"turbo")
 	var on_floor := is_on_floor()
+	if state in BETA_STATES:
+		_update_beta_move(delta)
+		return
 	if Input.is_action_just_pressed(&"sniper_mode"):
 		if sniping:
 			leave_sniper(true)
+			if beta_moves:
+				_set_state(State.HELMET_OFF)
+				return
+		elif beta_moves and _can_snipe(on_floor):
+			# The helmet goes on first (state 703); sniper mode starts when it's on.
+			stop_firing()
+			forward_speed = 0.0
+			strafe_speed = 0.0
+			_set_state(State.HELMET_ON)
+			return
 		else:
 			_enter_sniper(on_floor)
 	if sniping:
@@ -459,6 +496,15 @@ func _physics_process(delta: float) -> void:
 	if state == State.HANG:
 		_update_climb(delta)
 		return
+	if beta_moves and on_floor and state not in [State.THROW, State.KNOCKED] and health > 0 and walk_mode == Walk.NORMAL:
+		var roll_left := Input.is_physical_key_pressed(ROLL_LEFT_KEY)
+		if roll_left or Input.is_physical_key_pressed(ROLL_RIGHT_KEY):
+			stop_firing()
+			forward_speed = 0.0
+			strafe_speed = 0.0
+			play_sound("ROLL")
+			_set_state(State.ROLL_LEFT if roll_left else State.ROLL_RIGHT)
+			return
 	_update_turning(delta, turbo)
 
 	var forward_input := Input.get_axis(&"move_back", &"move_forward")
@@ -626,8 +672,43 @@ func _update_knock_damage(delta: float) -> void:
 
 ## Enters sniper mode (`damp_move` 0x46883c): only standing on a floor, not knocked down, sliding
 ## or throwing. Kurt stops firing and shows `SNIPERON` (state 803); his sprite isn't drawn.
+func _can_snipe(on_floor: bool) -> bool:
+	return on_floor and not sliding and health > 0 and state not in [State.KNOCKED, State.DEAD, State.THROW]
+
+
+## The 1996 demo's moves that play an animation through (`damp_animate` 0x36cf4): a roll moves
+## Kurt sideways while he turns the other way; the helmet goes on (then sniper mode starts) or
+## comes off (the same frames backwards).
+func _update_beta_move(delta: float) -> void:
+	var animation := sprites.get_animation(STATE_ANIMATIONS[state][0])
+	var last := animation.frame_count - 1
+	animation_frame += TICKS * delta
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if state in [State.ROLL_LEFT, State.ROLL_RIGHT]:
+		var side := -1.0 if state == State.ROLL_LEFT else 1.0
+		yaw += side * deg_to_rad(ROLL_TURN) / animation.frame_count * TICKS * delta
+		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+		velocity.x = right.x * side * ROLL_SPEED
+		velocity.z = right.z * side * ROLL_SPEED
+	velocity.y = maxf(velocity.y - GRAVITY * delta, -MAX_FALL_SPEED)
+	_update_inside_bodies()
+	move_and_slide()
+	var frame := mini(int(animation_frame), last)
+	# `K_ROLLL.ABB` and `K_ROLLR.ABB` are the same file, a roll to the right: the port mirrors it
+	# for the roll to the left.
+	sprite.flip_h = state == State.ROLL_LEFT
+	sprite.show_frame(animation, last - frame if state == State.HELMET_OFF else frame)
+	if animation_frame < last:
+		return
+	var helmet_on := state == State.HELMET_ON
+	_set_state(State.STILL)
+	if helmet_on:
+		_enter_sniper(is_on_floor())
+
+
 func _enter_sniper(on_floor: bool) -> void:
-	if not on_floor or sliding or health == 0 or state in [State.KNOCKED, State.DEAD, State.THROW]:
+	if not _can_snipe(on_floor):
 		return
 	stop_firing()
 	sniping = true
@@ -1173,13 +1254,17 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 		_set_state(State.STILL)
 
 	animation = sprites.get_animation(STATE_ANIMATIONS[state][0])
+	# The 1996 demo's levels show Kurt backing up with his own frames instead of the run backwards.
+	var backing_up := beta_moves and state == State.RUN and forward_speed < 0.0 and sprites.has(BACK_UP_ANIMATION)
+	if backing_up:
+		animation = sprites.get_animation(BACK_UP_ANIMATION)
 	match state:
 		State.RUN, State.RUN_FIRE:
 			# `damp_run_anim_frame`: the run animation follows the speed (backwards when backing up).
 			var u := absf(forward_speed) / TICKS * 1.5
 			var rate := 0.75 * u + 0.25 if u <= 1.0 else 0.25 * u + 0.75
 			var previous := posmod(int(floor(animation_frame)), animation.frame_count)
-			animation_frame += rate * TICKS * delta * (-1.0 if forward_speed < 0.0 else 1.0)
+			animation_frame += rate * TICKS * delta * (-1.0 if forward_speed < 0.0 and not backing_up else 1.0)
 			var current := posmod(int(floor(animation_frame)), animation.frame_count)
 			# Footsteps on frames 0 and 13 (4 and 17 when firing).
 			var steps := [4, 17] if state == State.RUN_FIRE else [0, 13]

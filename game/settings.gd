@@ -20,6 +20,9 @@ var music_filter := true
 var mouse_sensitivity := 1.0
 var invert_mouse := false
 var fullscreen := false
+## Anti-aliasing of the 3D view (MSAA): 0 off, 1 2×, 2 4× (the project's setting). It costs the
+## most of all on a graphics card that is short of memory.
+var antialiasing := 2
 ## 0 easy, 1 normal, 2 hard.
 var difficulty := 1
 ## Gore (the original's `0x5742dc`, on by default): green sparks on aliens (else blue), slime when
@@ -30,6 +33,7 @@ var gore := true
 ## The enhanced look (`MDKMeshBuilder.Look.ENHANCED`: lit, filtered textures, sun and shadows,
 ## ambient occlusion, glow, fog), from the next level on.
 var enhanced_graphics := false
+const ANTIALIASING_NAMES := ["Off", "2x", "4x"]
 ## The game's actions in the order the controls screen lists them, with their names.
 const ACTIONS := {
 	&"move_forward": "Forward", &"move_back": "Back", &"turn_left": "Turn left", &"turn_right": "Turn right",
@@ -63,6 +67,7 @@ func _load() -> void:
 	mouse_sensitivity = config.get_value("controls", "mouse_sensitivity", mouse_sensitivity)
 	invert_mouse = config.get_value("controls", "invert_mouse", invert_mouse)
 	fullscreen = config.get_value("video", "fullscreen", fullscreen)
+	antialiasing = clampi(config.get_value("video", "antialiasing", antialiasing), 0, ANTIALIASING_NAMES.size() - 1)
 	difficulty = config.get_value("game", "difficulty", difficulty)
 	gore = config.get_value("game", "gore", gore)
 	enhanced_graphics = config.get_value("display", "enhanced_graphics", enhanced_graphics)
@@ -93,6 +98,7 @@ func save() -> void:
 	config.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
 	config.set_value("controls", "invert_mouse", invert_mouse)
 	config.set_value("video", "fullscreen", fullscreen)
+	config.set_value("video", "antialiasing", antialiasing)
 	config.set_value("game", "difficulty", difficulty)
 	config.set_value("game", "gore", gore)
 	config.set_value("display", "enhanced_graphics", enhanced_graphics)
@@ -127,6 +133,7 @@ func apply() -> void:
 	AudioServer.set_bus_volume_db(_music_bus, _volume_db(music_volume))
 	AudioServer.set_bus_volume_db(_effects_bus, _volume_db(effects_volume))
 	AudioServer.set_bus_effect_enabled(_music_bus, 0, music_filter)
+	get_tree().root.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][antialiasing]
 	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 	if DisplayServer.get_name() != "headless" and DisplayServer.window_get_mode() != mode:
 		DisplayServer.window_set_mode(mode)

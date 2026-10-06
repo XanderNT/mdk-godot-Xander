@@ -7,7 +7,7 @@
 ## Game command line options (`--level`, `--viewer`, `--screenshot`, …) skip the menu,
 ## unless `--menu` is given; `--options` and `--controls` open those screens; `--stats=N` shows the
 ## screens after LEVELn (`--phase=1…4` starts at a page, `--counts=shots,hits,sniper,sniper hits,
-## kills,enemies,heads`, `--towns=bits`), `--briefing=N` its briefing and `--fall=N` the fall before it,
+## kills,enemies,heads`, `--towns=bits`), `--beta-levels` the page of the 1996 demo's levels, `--briefing=N` its briefing and `--fall=N` the fall before it,
 ## `--stream=N` the stream after it, `--end` the end movie.
 extends Control
 
@@ -25,6 +25,10 @@ const DEBUG_LAST_LEVEL := KEY_8
 const DEBUG_FALL_INDEX := 4
 const DEBUG_STREAM_INDEX := 0
 const DEBUG_STATS_MAX := 100
+
+## The page of the 1996 demo's levels (`_show_beta_levels`): its title and the levels' names.
+const BETA_TITLE := "Beta Levels"
+const BETA_LEVEL_NAMES := {1: "96 Level 1: City", 3: "96 Level 3: Wheel Boss", 6: "96 Level 6: Olympus"}
 
 ## The page shown, for Esc.
 enum Page { MAIN, QUIT, OTHER }
@@ -99,6 +103,8 @@ func _ready() -> void:
 	_show_main()
 	if args.has("options"):
 		_show_options()
+	if args.has("beta-levels") and MDKBeta.is_available():
+		_show_beta_levels()
 	if args.has("controls"):
 		items.show_controls(_show_options)
 
@@ -200,6 +206,9 @@ func _show_main() -> void:
 	items.add_item(fti.get_text("OPT1", "New Game"), _on_new_game)
 	items.add_item("", _on_level).name = "Level"
 	items.add_item(fti.get_text("OPT2", "Saved Game"), _show_saves)
+	# The 1996 demo's levels, when the demo is found.
+	if MDKBeta.is_available():
+		items.add_item(BETA_TITLE, _show_beta_levels)
 	items.add_item(fti.get_text("OPT3", "Options"), _show_options)
 	items.add_item(fti.get_text("OPT4", "Quit"), get_tree().quit)
 	# The main page is a column at the view's left edge (0x4265c0).
@@ -243,6 +252,26 @@ func _show_options() -> void:
 	items.show_options(func() -> void:
 		music.play()
 		_show_main())
+
+
+## The levels of the 1996 demo (`MDKBeta`, docs/beta96.md), a page of the port's own.
+func _show_beta_levels() -> void:
+	items.clear()
+	_page = Page.OTHER
+	items.add_title(BETA_TITLE)
+	for beta_level in MDKBeta.LEVELS:
+		items.add_item(BETA_LEVEL_NAMES[beta_level], _on_beta_level.bind(beta_level))
+	items.add_item("Back", _show_main)
+	items.get_child(1).grab_focus()
+
+
+## The demo's levels start at once: it has no briefing or fall.
+func _on_beta_level(beta_level: int) -> void:
+	GameState.level = MDKBeta.number_of(beta_level)
+	GameState.deaths = 0
+	GameState.strike_used = false
+	GameState.carry = {}
+	get_tree().change_scene_to_file("res://game/main.tscn")
 
 
 func _update_level_text() -> void:

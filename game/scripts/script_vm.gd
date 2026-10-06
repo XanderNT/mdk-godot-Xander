@@ -8,6 +8,10 @@ const MAX_OPCODES_PER_FRAME := 1000
 const GOSUB_DEPTH := 4
 ## Return value of handlers: stop running this object's script for this frame.
 const YIELD := -1
+## The projectile of the 1996 demo's `fire` (`_fire_beta`).
+const BETA_BOLT := "BOLT"
+const BETA_BOLT_SPEED := 75.0
+const BETA_BOLT_DAMAGE := 10
 
 var runtime: MDKScriptRuntime
 var decoder: MDKScriptDecoder
@@ -1107,6 +1111,18 @@ func _execute(obj: MDKObject, ins: MDKScriptDecoder.Instruction) -> int:
 			runtime.preload_arena(o[0])
 		239:  # set_27c (not identified)
 			pass
+
+		# The 1996 demo's own opcodes (`MDKBetaScriptDecoder`).
+		MDKBetaScriptDecoder.BETA_FOLLOW_PATH:
+			_follow_beta_path(obj, o[0])
+		MDKBetaScriptDecoder.BETA_FIRE:
+			_fire_beta(obj, o)
+		MDKBetaScriptDecoder.BETA_IF_ALARM_ENDED:
+			return _branch(obj, ins, runtime.alarm_ended_ticks > 0)
+		MDKBetaScriptDecoder.BETA_IF_FIELD_108:
+			return _branch(obj, ins, false)
+		MDKBetaScriptDecoder.BETA_NOTHING:
+			pass
 		_:
 			unimplemented[ins.opcode] = unimplemented.get(ins.opcode, 0) + 1
 			if not ins.action.is_empty():
@@ -1192,6 +1208,36 @@ func _follow_path(obj: MDKObject, o: Array) -> void:
 			time = motion.path_key_frame(path, motion.path_key_count(path) - 1) - 1
 	var origin: Vector3 = obj.mdk_position - motion.path_position(path, time) if o[4] != 0 else Vector3(o[5][0], o[5][1], o[5][2])
 	motion.start_path(obj, path, time, origin)
+
+
+## The 1996 demo's `follow_path` (0x47f6c, opcode 2): a path stopped by opcode 21 goes on from
+## where it stopped, another path starts at its first frame. The object turns along the path,
+## whose positions are absolute, and goes round it again and again (0x32ff8).
+func _follow_beta_path(obj: MDKObject, path: int) -> void:
+	if path == 0:
+		obj.path = 0
+		return
+	if obj.path == path:
+		obj.path_stop = -1
+		return
+	obj.flags &= ~(MDKObject.FLAG_PATH_PUSHES | MDKObject.FLAG_PATH_ONCE | MDKObject.FLAG_NO_TURNING)
+	runtime.motion.start_path(obj, path, 0.0, Vector3.ZERO)
+
+
+## The 1996 demo's `fire` (opcode 61): `[origin, aim, range, accuracy, ?]`. A `BOLT` leaves a
+## reference point or a part, towards the target when `aim` is set (with the retail `aim_target`'s
+## error) or along the object's yaw. It has no script: it flies `BETA_BOLT_SPEED` units a second
+## for `range` units and takes `BETA_BOLT_DAMAGE` off Kurt's health when it touches him (0x4e2ec).
+func _fire_beta(obj: MDKObject, o: Array) -> void:
+	var bolt := runtime.fire(obj, o[0], BETA_BOLT, 0)
+	if not bolt:
+		return
+	if o[1] != 0:
+		_aim(bolt, o[3], false)
+	bolt.speed = BETA_BOLT_SPEED
+	bolt.parameter = o[2] / BETA_BOLT_SPEED
+	bolt.touch_damage = BETA_BOLT_DAMAGE
+	bolt.update_transform()
 
 
 ## Aims the yaw and pitch at the target (`aim_target`, `aim_target_inaccurate`), with a random

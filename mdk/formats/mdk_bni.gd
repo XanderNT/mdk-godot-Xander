@@ -36,6 +36,14 @@ func has(entry_name: String) -> bool:
 	return entries.has(entry_name)
 
 
+## Adds or replaces an entry with `data` (the 1996 demo's loose sprite files, `MDKBeta`).
+func add_entry(entry_name: String, data: PackedByteArray) -> void:
+	entries[entry_name] = [bytes.size(), data.size()]
+	bytes.append_array(data)
+	_animations.erase(entry_name)
+	_images.erase(entry_name)
+
+
 ## Returns a plain image entry (`u16 width, u16 height`, palette indices).
 func get_image(entry_name: String) -> MDKTexture:
 	if not _images.has(entry_name):

@@ -23,6 +23,12 @@ static func load_file(path: String) -> MDKMto:
 	return mto
 
 
+## Adds an arena read from elsewhere (the 1996 demo keeps its arenas in loose files, `MDKBeta`).
+func add_arena(arena: MDKArena) -> void:
+	arena_offsets[arena.name] = 0
+	_arenas[arena.name] = arena
+
+
 func get_arena_names() -> Array:
 	return arena_offsets.keys()
 

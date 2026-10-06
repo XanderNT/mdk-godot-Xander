@@ -81,6 +81,8 @@ var kurt_yaw := 0.0
 var alien_target: MDKObject
 ## Ticks the alarm keeps sounding (`0x573aec`), set by objects with movement command 15.
 var alarm_ticks := 0
+## Ticks left of "an object that sounded the alarm is gone" (the 1996 demo's `0xe21de`, opcode 28).
+var alarm_ended_ticks := 0
 ## How the sky is drawn (`0x574304`, opcode 202): 0 normally, 1 black, −1 not drawn.
 var sky_mode := 0:
 	set(value):
@@ -163,7 +165,8 @@ var _box_time := 0.0
 func setup(p_level: Level, p_kurt: Kurt) -> void:
 	level = p_level
 	kurt = p_kurt
-	vm = MDKScriptVM.new(self, MDKScriptDecoder.new(level.cmi.bytes))
+	var decoder := MDKBetaScriptDecoder.new(level.cmi) if level.cmi.beta else MDKScriptDecoder.new(level.cmi.bytes)
+	vm = MDKScriptVM.new(self, decoder)
 	GameState.reset_stats()
 	motion = MDKObjectMotion.new(self)
 	behaviors = MDKObjectBehaviors.new(self)
@@ -200,7 +203,7 @@ func setup(p_level: Level, p_kurt: Kurt) -> void:
 	kurt.can_use_item = items.can_use
 	option = 1 if Settings.gore else 0
 	# No town to save in the last level (index 5, LEVEL5).
-	if GameState.index_of(level.number) != 5:
+	if GameState.index_of(level.number) != 5 and not level.cmi.beta:
 		town_ticks = TOWN_TICKS[kurt.inventory.difficulty]
 
 
@@ -424,6 +427,7 @@ func _tick() -> void:
 		_cutscene_tick()
 		return
 	alarm_ticks = maxi(alarm_ticks - 1, 0)
+	alarm_ended_ticks = maxi(alarm_ended_ticks - 1, 0)
 	camera_track_ticks = maxi(camera_track_ticks - 1, 0)
 	_update_bar()
 	if town_ticks > 0:
@@ -944,6 +948,8 @@ func remove(obj: MDKObject) -> void:
 ## otherwise it explodes. `yaw` is the direction the explosion faces.
 func kill(obj: MDKObject, yaw := 0.0) -> void:
 	obj.health = 0
+	if obj.move_command == 15:
+		alarm_ended_ticks = ALARM_ENDED_TICKS
 	if obj.death_script:
 		obj.move_command = 0
 		obj.flags |= MDKObject.FLAG_NOT_TARGET
@@ -1106,6 +1112,8 @@ const COW_FLAGS := MDKObject.FLAG_GRAVITY | MDKObject.FLAG_COLLIDES | MDKObject.
 const RAY_ARENAS_MAX := 16
 
 ## DTI records of aliens and of static objects (pickups: flags 0x2008a0, 0x43bd38).
+const ALARM_ENDED_TICKS := 10
+const BETA_PART_SPREAD := 1.5
 const DTI_ALIEN := 2
 const DTI_STATIC := 4
 const DTI_STATIC_FLAGS := MDKObject.FLAG_PICKUP | MDKObject.FLAG_NOT_SOLID_2 | MDKObject.FLAG_NO_BANKING | MDKObject.FLAG_NOT_TARGET
@@ -1227,11 +1235,43 @@ static func _is_weak_part(obj: MDKObject, index: int) -> bool:
 	return part_name.begins_with(obj.weak_prefix.left(obj.weak_prefix_length))
 
 
+## The part of an object the chain gun hits in the 1996 demo's levels, or −1. Its scripts ask
+## which part was hit for every object (`if_hit_part`: the guns of `XW3`, the eyes and the nose of
+## `XB2`, the grunts' heads), where the retail game only tells weak parts apart. How the demo
+## picks the part wasn't read ❓; the port takes one of the shown parts nearest to the line Kurt
+## fires along (within `BETA_PART_SPREAD` of the nearest, at random, so that parts above each
+## other all get hit).
+func _beta_hit_part(obj: MDKObject, origin: Vector3) -> int:
+	if not obj.model:
+		return -1
+	var aim := Vector2.from_angle(deg_to_rad(kurt_yaw))
+	var part_bounds := obj.get_part_bounds()
+	var distances := PackedFloat32Array()
+	var nearest := INF
+	for i in obj.model.parts.size():
+		var distance := INF
+		if not obj.hidden_parts & (1 << i):
+			var center := get_world_bounds(obj, part_bounds[i]).get_center()
+			var to_part := Vector2(center.x - origin.x, center.y - origin.y)
+			distance = absf(to_part.cross(aim))
+		distances.push_back(distance)
+		nearest = minf(nearest, distance)
+	var candidates: Array[int] = []
+	for i in distances.size():
+		if distances[i] <= nearest + BETA_PART_SPREAD:
+			candidates.push_back(i)
+	return candidates.pick_random() if not candidates.is_empty() and nearest < INF else -1
+
+
 func _chain_gun_hit(obj: MDKObject, part: int, bounds: AABB, origin: Vector3, damage: int, super_gun: bool) -> void:
 	var center := bounds.get_center()
 	var direction := rad_to_deg(atan2(center.y - origin.y, center.x - origin.x))
 	GameState.stats.shot_hits += 1
 	obj.hit_event = -1
+	if level.cmi.beta and part < 0:
+		obj.hit_event = _beta_hit_part(obj, origin) + 1
+		if obj.hit_event == 0:
+			obj.hit_event = -1
 	if part >= 0 and part < obj.part_health.size():
 		obj.part_health[part] -= damage
 		if obj.part_health[part] <= 0:
@@ -1682,7 +1722,8 @@ func get_arena_floor(arena_name: String) -> float:
 func raycast(from: Vector3, to: Vector3) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(MDKMeshBuilder.to_godot(from), MDKMeshBuilder.to_godot(to), LEVEL_LAYER)
 	var space := get_world_3d().direct_space_state
-	var exclude: Array[RID] = []
+	# The 1996 demo's triangles that only stop Kurt don't stop rays.
+	var exclude: Array[RID] = level.clip_rids.duplicate()
 
 	# Only Kurt's arena and the second one (loaded, active or not) stop rays (0x421680); the
 	# others are passed through.
@@ -1827,6 +1868,8 @@ const CMI_ANIMATION_PREFIX := "CMI_"
 func get_animation(obj: MDKObject, offset: int) -> MDKModelAnimation:
 	if offset == 0:
 		return null
+	if level.cmi.beta:
+		return level.cmi.get_beta_animation(offset)
 	var bytes := level.cmi.bytes
 	if bytes.decode_u32(offset) == 0:
 		return find_arena_animation(obj.arena, bytes.slice(offset + 4, offset + 12).get_string_from_ascii())

@@ -21,7 +21,15 @@ var arena_scripts := {}
 ## Arena name to its music (a sound of `LEVELnO.SNI`, or `NONE`).
 var arena_music := {}
 
+## The 1996 demo's file (`MDKBeta.load_cmi`): an earlier bytecode (`MDKBetaScriptDecoder`),
+## animations inside the file instead of in the arenas, and an ambient loop per arena.
+var beta := false
+var arena_ambience := {}
+## The demo's paths converted to spline records at the end of `bytes`: old offset to new.
+var beta_paths := {}
+
 var _models := {}
+var _beta_animations := {}
 
 
 static func load_file(path: String) -> MDKCmi:
@@ -54,3 +62,10 @@ func get_model(model_name: String) -> MDKModel:
 	if not _models.has(model_name):
 		_models[model_name] = MDKModel.parse(model_name, bytes, model_offsets[model_name])
 	return _models[model_name]
+
+
+## An animation of the 1996 demo's file, which scripts point at directly.
+func get_beta_animation(offset: int) -> MDKModelAnimation:
+	if not _beta_animations.has(offset):
+		_beta_animations[offset] = MDKModelAnimation.parse_beta("@%x" % offset, bytes, offset)
+	return _beta_animations[offset]

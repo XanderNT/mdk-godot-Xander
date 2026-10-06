@@ -151,6 +151,9 @@ var velocity := Vector3()
 var push := Vector3()
 ## Per kind parameter (`obj+0x302`): projectile lifetime, jump flight time… and its timer (`obj+0x306`).
 var parameter := 0.0
+## Taken off Kurt's health when this projectile touches him, which then ends it: the bolts of the
+## 1996 demo have no script to do it (`MDKScriptVM._fire_beta`).
+var touch_damage := 0
 var parameter_timer := 0.0
 
 # Path state (`obj+0xe6`…`obj+0x100`).
