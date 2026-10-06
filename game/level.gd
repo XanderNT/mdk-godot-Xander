@@ -77,6 +77,8 @@ var _hidden_triangles := {}
 ## Arena to the body of its triangles that only stop Kurt (`_build_clip`), and their RIDs.
 var _clip_bodies := {}
 var clip_rids: Array[RID] = []
+## Arena to the collision bodies of all the other arenas (`get_other_bodies`).
+var _other_bodies := {}
 
 
 ## Loads level `p_number` (3–8) and builds its arenas.
@@ -379,6 +381,24 @@ func show_arenas(arena_names: Array[String]) -> void:
 	for arena_name: String in arena_bounds:
 		if has_node(arena_name):
 			(get_node(arena_name) as Node3D).visible = arena_name in arena_names
+
+
+## The collision bodies of every arena but this one: objects collide only with their own arena
+## (0x45e810), e.g. LEVEL5's key falls through the overlapping CMUSE_4 onto MUSE_5's floor.
+func get_other_bodies(arena_name: String) -> Array[RID]:
+	if _other_bodies.has(arena_name):
+		return _other_bodies[arena_name]
+
+	var bodies: Array[RID] = []
+	for other: String in arena_groups:
+		if other == arena_name:
+			continue
+		for group: TriangleGroup in arena_groups[other].values():
+			bodies.push_back((group.shape.get_parent() as StaticBody3D).get_rid())
+		if _clip_bodies.has(other):
+			bodies.push_back(_clip_bodies[other].get_rid())
+	_other_bodies[arena_name] = bodies
+	return bodies
 
 
 ## Kurt collides only with these arenas; rays still hit all of them.

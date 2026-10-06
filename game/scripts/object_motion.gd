@@ -21,6 +21,8 @@ var _box := BoxShape3D.new()
 var _probe := RID()
 var _motion_parameters := PhysicsTestMotionParameters3D.new()
 var _motion_result := PhysicsTestMotionResult3D.new()
+## The arena whose geometry the probe collides with (the others are excluded).
+var _probe_arena := ""
 
 
 func _init(p_runtime: MDKScriptRuntime) -> void:
@@ -691,7 +693,12 @@ func _sweep(obj: MDKObject, motion: Vector3) -> Variant:
 		_create_probe()
 	# Godot's shape casts ignore shapes they start inside of (the whole arena is one shape), so the
 	# motion is tested like a character body's: it recovers from overlaps and reports them.
-	_motion_parameters.exclude_bodies = [runtime.kurt.get_rid()]
+	if obj.arena != _probe_arena:
+		# Only the object's own arena stops it (0x45e810).
+		_probe_arena = obj.arena
+		var excluded: Array[RID] = [runtime.kurt.get_rid()]
+		excluded.append_array(runtime.level.get_other_bodies(obj.arena))
+		_motion_parameters.exclude_bodies = excluded
 	var normal: Variant = null
 	var remaining := motion
 	for i in 2:
