@@ -252,6 +252,8 @@ var updraft: Callable
 ## Kurt slides on his back (`0x573be8`, state 807): the wind zones start it.
 ## Kurt stands still and ignores the controls (cutscenes).
 var frozen := false
+## He fell out of his arena's bottom: dead where he is, as on a floor (`fall_out`).
+var _fell_out := false
 ## Sniper mode: on, the view's pitch in degrees (positive looks down, `0x573918`), the zoom, the
 ## rounds loaded and the clip timer.
 var sniping := false
@@ -371,6 +373,14 @@ func teleport(p_position: Vector3, p_yaw: float) -> void:
 	forward_speed = 0.0
 	strafe_speed = 0.0
 	reset_physics_interpolation()
+
+
+## Out of his arena's bottom (`damp_gravity` 0x469efc): he dies where he is, as on a floor.
+func fall_out() -> void:
+	health = 0
+	velocity = Vector3.ZERO
+	_fell_out = true
+	_die()
 
 
 ## Damage from aliens (`hurt_kurt`).
@@ -1001,7 +1011,7 @@ func _update_slide_sound() -> void:
 ## Dead Kurt lies still while the skull fades in (`damp_control`), then the level restarts (the
 ## original loads the last saved game).
 func _update_death(delta: float) -> void:
-	velocity = Vector3(0.0, velocity.y - GRAVITY * delta, 0.0) if not is_on_floor() else Vector3.ZERO
+	velocity = Vector3(0.0, velocity.y - GRAVITY * delta, 0.0) if not is_on_floor() and not _fell_out else Vector3.ZERO
 	move_and_slide()
 	state_time += delta
 	var animation := sprites.get_animation("K_BANG")
@@ -1191,13 +1201,7 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 	var animation := sprites.get_animation(STATE_ANIMATIONS[state][0])
 	var animation_done := animation_frame >= animation.frame_count - 1
 	if health == 0 and is_on_floor():
-		# Dead: the death animation once on the floor (state 1002).
-		firing = false
-		_gun_player.stop()
-		muzzle.visible = false
-		hurt_flash = 0.0
-		_set_state(State.DEAD)
-		sprite.show_frame(sprites.get_animation("K_BANG"), 0)
+		_die()
 		return
 	if state == State.KNOCKED:
 		# `K_BANG` then `K_BFLIP`, one frame per tick; the push stops when he flips back up.
@@ -1290,6 +1294,16 @@ func _update_state(delta: float, forward_input: float, strafe_input: float) -> v
 
 
 ## The chute opening, then swaying (see `CHUTE_SWAY`).
+## Dead: the death animation once on the floor (state 1002).
+func _die() -> void:
+	firing = false
+	_gun_player.stop()
+	muzzle.visible = false
+	hurt_flash = 0.0
+	_set_state(State.DEAD)
+	sprite.show_frame(sprites.get_animation("K_BANG"), 0)
+
+
 func _show_chute() -> void:
 	var frame := int(floor(animation_frame))
 	if frame < CHUTE_OPENED_FRAME:

@@ -24,6 +24,8 @@ const FLAG_SECOND_TOWN_FLATTENED := 1 << 29
 ## Collision layer of the level geometry (objects are on layer 2, see `MDKObject.update_body()`, and
 ## Kurt on layer 3).
 const LEVEL_LAYER := 1
+## Kurt dies this far below his arena's lowest point (`damp_gravity` 0x469efc).
+const KURT_FALL_OUT_DEPTH := 50.0
 
 
 ## Per arena script state (the arena's embedded object).
@@ -458,6 +460,15 @@ func _physics_process(delta: float) -> void:
 		_tick_count += 1
 
 
+## Kurt fell out of his arena (not while riding: the rides move him themselves).
+func _check_fall_out() -> void:
+	if current_arena.is_empty() or kurt.health == 0 or kurt.ride.is_valid():
+		return
+
+	if kurt_position.z < get_arena_floor(current_arena) - KURT_FALL_OUT_DEPTH:
+		kurt.fall_out()
+
+
 ## Ticks run so far.
 func tick_count() -> int:
 	return _tick_count
@@ -505,6 +516,7 @@ func _tick() -> void:
 			second_arena = current_arena
 		current_arena = arena_name
 		show_arena(arena_name)
+	_check_fall_out()
 	_check_triggers()
 	_update_arenas()
 	_kurt_touches_groups()
