@@ -2,3 +2,6 @@
 .godot/
 __pycache__/
 build/
+# Your own folders of the game data (see mdk/mdk_data.gd) and launchers
+mdk_paths.cfg
+*.local.bat

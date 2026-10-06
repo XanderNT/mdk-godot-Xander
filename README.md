@@ -61,8 +61,9 @@ isn't notarized (right-click it and choose Open the first time).
 
 The original game data is required and isn't included; you need your own copy of MDK (for example
 from GOG). Place this project folder within the MDK installation folder (for example
-`C:\GOG Games\MDK\godot-mdk`), install MDK in the default GOG location, or set the `MDK_DATA_DIR`
-environment variable.
+`C:\GOG Games\MDK\godot-mdk`), install MDK in the default GOG location, set the `MDK_DATA_DIR`
+environment variable, or name the folder in a file `mdk_paths.cfg` next to `project.godot`
+(`[paths]`, then `mdk="C:/Games/MDK"`; `beta="…"` for the 1996 demo).
 
 Open the project in Godot 4.7 and run it. Command line options (after `--`):
 

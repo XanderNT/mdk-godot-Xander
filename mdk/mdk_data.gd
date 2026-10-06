@@ -5,6 +5,8 @@ extends Node
 ## folder: `MDK/mdk-godot/mdk-godot.exe`; macOS: `MDK/MDK.app/Contents/MacOS/MDK`).
 const EXECUTABLE_PARENTS := 5
 
+const LOCAL_PATHS_FILE := "mdk_paths.cfg"
+
 ## The path to the MDK installation folder (contains `TRAVERSE`, `MISC`, …).
 var data_dir := ""
 
@@ -13,10 +15,34 @@ func _ready() -> void:
 	data_dir = find_data_dir()
 	if data_dir.is_empty():
 		OS.alert("Couldn't find the MDK game data. You need the full version of MDK (GOG or Steam).\n"
-				+ "Place this project folder within the MDK installation folder, or install MDK in the default GOG location.")
+				+ "Place this project folder within the MDK installation folder, install MDK in the default GOG location,
+"
+					+ "or name its folder in a file mdk_paths.cfg next to project.godot:
+[paths]
+mdk=\"C:/Games/MDK\"")
 		get_tree().quit(1)
 		return
 	print("MDK data: %s" % data_dir)
+
+
+## A folder set in `mdk_paths.cfg`, a file of your own next to `project.godot` (or next to an
+## exported game), so the project runs from the editor without environment variables:
+##
+##     [paths]
+##     mdk="C:/Games/MDK"
+##     beta="C:/Games/MDK (1996-08-06) (beta demo)"
+##
+## `mdk` is the game's folder, `beta` the 1996 demo's (`MDKBeta`). Returns an empty string when
+## the file or the key is missing.
+static func get_local_path(key: String) -> String:
+	var folders: Array[String] = [ProjectSettings.globalize_path("res://")]
+	if OS.has_feature("template"):
+		folders.push_front(OS.get_executable_path().get_base_dir())
+	for folder in folders:
+		var config := ConfigFile.new()
+		if config.load(folder.path_join(LOCAL_PATHS_FILE)) == OK:
+			return str(config.get_value("paths", key, ""))
+	return ""
 
 
 ## Returns the MDK installation folder, or an empty string if it can't be found.
@@ -36,6 +62,9 @@ static func find_data_dir() -> String:
 		for level in EXECUTABLE_PARENTS:
 			candidates.push_front(dir)
 			dir = dir.get_base_dir()
+	var local_dir := get_local_path("mdk")
+	if not local_dir.is_empty():
+		candidates.push_front(local_dir)
 	var env_dir := OS.get_environment("MDK_DATA_DIR")
 	if not env_dir.is_empty():
 		candidates.push_front(env_dir)
